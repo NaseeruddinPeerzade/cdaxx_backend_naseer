@@ -316,8 +316,7 @@ public ResponseEntity<Map<String, Object>> getModulesByCourse(
 }
 
 
-    // Helper method to apply user video progress
-    private void applyUserVideoProgress(CourseResponseDTO courseDTO, Long userId, boolean isCoursePurchased) {
+private void applyUserVideoProgress(CourseResponseDTO courseDTO, Long userId, boolean isCoursePurchased) {
     System.out.println("=== APPLY USER VIDEO PROGRESS ===");
     System.out.println("User ID: " + userId);
     System.out.println("Course purchased: " + isCoursePurchased);
@@ -343,19 +342,23 @@ public ResponseEntity<Map<String, Object>> getModulesByCourse(
     int totalCompletedModules = 0;
     
     // Apply progress to videos in DTO
-    for (ModuleResponseDTO module : courseDTO.getModules()) {
-        System.out.println("\nProcessing module: " + module.getTitle() + " (ID: " + module.getId() + ")");
+    for (int moduleIndex = 0; moduleIndex < courseDTO.getModules().size(); moduleIndex++) {
+        ModuleResponseDTO module = courseDTO.getModules().get(moduleIndex);
+        System.out.println("\nProcessing module [" + moduleIndex + "]: " + 
+                          module.getTitle() + " (ID: " + module.getId() + ")");
         
-        // Module 1 should be unlocked if course is purchased
-        // OR if user has purchased the course
-        boolean isFirstModule = module.getId().equals(courseDTO.getModules().get(0).getId());
+        // Determine if this is the first module
+        boolean isFirstModule = moduleIndex == 0;
+        
+        System.out.println("  Is first module: " + isFirstModule);
+        System.out.println("  Is course purchased: " + isCoursePurchased);
         
         if (isCoursePurchased) {
             // If course is purchased, check module sequence
             if (isFirstModule) {
                 // First module is always unlocked for purchased courses
                 module.setIsLocked(false);
-                System.out.println("  First module unlocked (course purchased)");
+                System.out.println("  ✓ First module unlocked (course purchased)");
             } else {
                 // For subsequent modules, check if previous module was completed
                 module.setIsLocked(!previousModuleCompleted);
@@ -379,8 +382,39 @@ public ResponseEntity<Map<String, Object>> getModulesByCourse(
             moduleTotalVideos = module.getVideos().size();
             totalCourseVideos += moduleTotalVideos;
             
+            // FOR DEBUGGING: Print all video details
+            System.out.println("  Video list:");
             for (VideoResponseDTO video : module.getVideos()) {
-                System.out.println("    Video: " + video.getTitle() + " (ID: " + video.getId() + ")");
+                System.out.println("    - ID: " + video.getId() + 
+                                 ", Title: " + video.getTitle() + 
+                                 ", DisplayOrder: " + video.getDisplayOrder() + 
+                                 ", Current isLocked: " + video.getIsLocked());
+            }
+            
+            for (VideoResponseDTO video : module.getVideos()) {
+                System.out.println("    Processing video: " + video.getTitle() + 
+                                 " (ID: " + video.getId() + 
+                                 ", DisplayOrder: " + video.getDisplayOrder() + ")");
+                
+                // SPECIAL LOGIC FOR SUBSCRIBED COURSES: Unlock first 3 videos of first module
+                if (isCoursePurchased && isFirstModule && video.getDisplayOrder() <= 3) {
+                    System.out.println("    ✓ Special rule: First 3 videos of first module for subscribed course");
+                    video.setIsLocked(false);
+                    
+                    UserVideoProgress progress = progressMap.get(video.getId());
+                    if (progress != null) {
+                        System.out.println("      Progress exists - Completed: " + progress.isCompleted());
+                        video.setIsCompleted(progress.isCompleted());
+                        if (progress.isCompleted()) {
+                            moduleCompletedVideos++;
+                            totalCompletedCourseVideos++;
+                        }
+                    } else {
+                        System.out.println("      No progress record, marking as not completed");
+                        video.setIsCompleted(false);
+                    }
+                    continue; // Skip the rest of the logic for these videos
+                }
                 
                 UserVideoProgress progress = progressMap.get(video.getId());
                 if (progress != null) {
@@ -409,14 +443,17 @@ public ResponseEntity<Map<String, Object>> getModulesByCourse(
                     // Apply default logic based on module and purchase status
                     boolean isFirstVideo = video.getDisplayOrder() == 1;
                     
+                    System.out.println("      Is first video (displayOrder==1): " + isFirstVideo);
+                    System.out.println("      Module isLocked: " + module.getIsLocked());
+                    
                     if (Boolean.FALSE.equals(module.getIsLocked()) && isFirstVideo) {
                         // First video of an unlocked module is unlocked
                         video.setIsLocked(false);
                         moduleHasUnlockedVideo = true;
-                        System.out.println("      First video unlocked (module unlocked)");
+                        System.out.println("      ✓ First video unlocked (module unlocked)");
                     } else {
                         video.setIsLocked(true);
-                        System.out.println("      Video locked");
+                        System.out.println("      ✗ Video locked (not first video or module locked)");
                     }
                     video.setIsCompleted(false);
                     allVideosCompleted = false;
@@ -458,7 +495,7 @@ public ResponseEntity<Map<String, Object>> getModulesByCourse(
         // If module is locked but has an unlocked video from progress, unlock the module
         if (Boolean.TRUE.equals(module.getIsLocked()) && moduleHasUnlockedVideo) {
             module.setIsLocked(false);
-            System.out.println("  Module unlocked (has unlocked videos from progress)");
+            System.out.println("  ✓ Module unlocked (has unlocked videos from progress)");
         }
     }
     
@@ -476,7 +513,7 @@ public ResponseEntity<Map<String, Object>> getModulesByCourse(
     System.out.println("\n=== COURSE STATS ===");
     System.out.println("Total videos: " + totalCourseVideos);
     System.out.println("Completed videos: " + totalCompletedCourseVideos);
-    System.out.println("Completed modules: " + totalCompletedModules);  // This is what your Flutter needs!
+    System.out.println("Completed modules: " + totalCompletedModules);
     System.out.println("Course progress: " + courseProgressPercent + "%");
 }
 
@@ -624,6 +661,7 @@ public ResponseEntity<?> getModule(@PathVariable Long id) {
                 @RequestParam Long userId,
                 @RequestParam Long assessmentId,
                 @RequestBody Map<Long, String> answers) {
+                    
             
             try {
                 Map<String, Object> result = courseService.submitAssessment(userId, assessmentId, answers);

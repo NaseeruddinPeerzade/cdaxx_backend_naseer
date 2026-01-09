@@ -12,9 +12,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
  
     
-    // Or with @Query
-    @Query("SELECT u FROM User u WHERE u.email = :email")
-    Optional<User> findByEmail(@Param("email") String email);
+@Query("SELECT u FROM User u WHERE LOWER(TRIM(u.email)) = LOWER(TRIM(:email))")
+Optional<User> findByEmail(@Param("email") String email);
+
 
     // ✅ Find user by phone number (NOT mobile)
     Optional<User> findByPhoneNumber(String phoneNumber);
@@ -24,4 +24,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // ✅ Check if phone number exists (NOT mobile)
     boolean existsByPhoneNumber(String phoneNumber);
+
+    Optional<User> findByRefreshToken(String refreshToken);
 }

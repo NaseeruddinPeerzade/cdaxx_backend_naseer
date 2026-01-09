@@ -38,7 +38,7 @@ public class CourseService {
             courses = courseRepository.findAll();
         } else {
             courses = courseRepository.findBySubscribedUsers_Id(userId);
-        }
+        }   
         return courses.stream().map(CourseResponseDTO::new).collect(Collectors.toList());
     }
 

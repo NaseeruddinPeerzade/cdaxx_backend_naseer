@@ -1,9 +1,16 @@
 package com.example.cdaxVideo.Controller;
 
 import com.example.cdaxVideo.Entity.User;
+import com.example.cdaxVideo.Repository.UserRepository;
 import com.example.cdaxVideo.Service.AuthService;
+import com.example.cdaxVideo.Config.JwtTokenUtil;
+import com.example.cdaxVideo.DTO.UserDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -17,10 +24,17 @@ public class AuthController {
     @Autowired
     private AuthService authService;
 
-    // ---------------------- REGISTER ----------------------
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private JwtTokenUtil jwtTokenUtil;
+
+    // ==================== EXISTING ENDPOINTS (KEPT AS IS) ====================
+
+    // ---------------------- REGISTER (Original) ----------------------
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> registerUser(@RequestBody User user) {
-
         String result = authService.registerUser(user);
         Map<String, Object> resp = new HashMap<>();
 
@@ -44,16 +58,13 @@ public class AuthController {
         }
     }
 
-
-    // ---------------------- LOGIN ----------------------
+    // ---------------------- LOGIN (Original) ----------------------
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> loginUser(@RequestBody User user) {
-
         String result = authService.loginUser(user);
         Map<String, Object> resp = new HashMap<>();
 
         switch (result) {
-
             case "Login successful":
                 // GET FULL USER DETAILS
                 User fullUser = authService.getUserByEmail(user.getEmail());
@@ -61,7 +72,6 @@ public class AuthController {
                 resp.put("success", true);
                 resp.put("message", "Login successful");
                 resp.put("user", fullUser);   // ✅ IMPORTANT
-
                 return ResponseEntity.ok(resp);
 
             case "Incorrect password":
@@ -81,8 +91,184 @@ public class AuthController {
         }
     }
 
+    // ==================== NEW JWT ENDPOINTS ====================
+
+    // ---------------------- REGISTER with JWT ----------------------
+    @PostMapping("/jwt/register")
+    public ResponseEntity<Map<String, Object>> registerUserWithJWT(@RequestBody User user) {
+        try {
+            Map<String, Object> result = authService.registerUserWithJWT(user);
+            result.put("success", true);
+            return ResponseEntity.ok(result);
+        } catch (RuntimeException e) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", false);
+            resp.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(resp);
+        } catch (Exception e) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", false);
+            resp.put("message", "Registration failed");
+            return ResponseEntity.status(500).body(resp);
+        }
+    }
+
+    // ---------------------- LOGIN with JWT ----------------------
+@PostMapping("/jwt/login")
+public ResponseEntity<Map<String, Object>> loginUserWithJWT(@RequestBody Map<String, String> credentials) {
+    try {
+        String email = credentials.get("email");
+        String password = credentials.get("password");
+
+        if (email == null || password == null || email.isEmpty() || password.isEmpty()) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", false);
+            resp.put("message", "Email and password are required");
+            return ResponseEntity.badRequest().body(resp);
+        }
+
+        Map<String, Object> result = authService.loginUserWithJWT(email, password);
+        result.put("success", true);
+        return ResponseEntity.ok(result);
+
+    } catch (RuntimeException e) {
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", false);
+        resp.put("message", e.getMessage());
+        return ResponseEntity.status(401).body(resp);
+    }
+}
 
 
+    // ---------------------- GET CURRENT USER (Protected) ----------------------
+    @GetMapping("/jwt/me")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Map<String, Object>> getCurrentUser() {
+        try {
+            UserDTO userDTO = authService.getCurrentUser();
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", true);
+            resp.put("user", userDTO);
+            return ResponseEntity.ok(resp);
+        } catch (RuntimeException e) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", false);
+            resp.put("message", e.getMessage());
+            return ResponseEntity.status(401).body(resp);
+        }
+    }
+
+
+
+    // ==================== PROFILE UPDATE ENDPOINTS ====================
+
+@PutMapping("/profile/update")
+@PreAuthorize("isAuthenticated()")
+public ResponseEntity<Map<String, Object>> updateProfile(@RequestBody Map<String, Object> updates) {
+    try {
+        UserDTO updatedUser = authService.updateProfile(updates);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("message", "Profile updated successfully");
+        resp.put("user", updatedUser);
+        return ResponseEntity.ok(resp);
+    } catch (RuntimeException e) {
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", false);
+        resp.put("message", e.getMessage());
+        return ResponseEntity.badRequest().body(resp);
+    }
+}
+
+// In AuthController - update /profile/me endpoint
+@GetMapping("/profile/me")
+@PreAuthorize("isAuthenticated()")
+public ResponseEntity<Map<String, Object>> getMyProfile() {
+    try {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+        
+        // Use getFullUserProfile instead of getCurrentUser
+        UserDTO userDTO = authService.getFullUserProfile(email);
+        
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", true);
+        resp.put("user", userDTO);
+        return ResponseEntity.ok(resp);
+    } catch (RuntimeException e) {
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("success", false);
+        resp.put("message", e.getMessage());
+        return ResponseEntity.status(401).body(resp);
+    }
+}
+
+private Map<String, Object> convertToProfileDTO(UserDTO userDTO) {
+    Map<String, Object> profile = new HashMap<>();
+    profile.put("id", userDTO.getId());
+    profile.put("firstName", userDTO.getFirstName());
+    profile.put("lastName", userDTO.getLastName());
+    profile.put("email", userDTO.getEmail());
+    profile.put("role", userDTO.getRole());
+    profile.put("isNewUser", userDTO.getIsNewUser());
+    
+    // Get full user details from database for additional fields
+    User user = authService.getUserById(userDTO.getId());
+    if (user != null) {
+        profile.put("phoneNumber", user.getPhoneNumber());
+        profile.put("address", user.getAddress());
+        profile.put("dateOfBirth", user.getDateOfBirth());
+        profile.put("profileImage", user.getProfileImage());
+    }
+    
+    return profile;
+}
+
+    // ---------------------- VALIDATE TOKEN ----------------------
+    @PostMapping("/jwt/validate")
+    public ResponseEntity<Map<String, Object>> validateToken(@RequestBody Map<String, String> tokenRequest) {
+        try {
+            String token = tokenRequest.get("token");
+            if (token == null || token.isEmpty()) {
+                throw new RuntimeException("Token is required");
+            }
+            
+            boolean isValid = authService.validateToken(token);
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", true);
+            resp.put("valid", isValid);
+            return ResponseEntity.ok(resp);
+        } catch (Exception e) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("success", false);
+            resp.put("message", e.getMessage());
+            resp.put("valid", false);
+            return ResponseEntity.ok(resp);
+        }
+    }
+
+    // ---------------------- REFRESH TOKEN ----------------------
+@PostMapping("/jwt/refresh")
+public ResponseEntity<Map<String, Object>> refreshToken(@RequestBody Map<String, String> body) {
+    String refreshToken = body.get("refreshToken");
+
+    User user = userRepository.findByRefreshToken(refreshToken)
+            .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+
+    // Generate new access token
+    String newAccessToken = jwtTokenUtil.generateToken(user.getEmail(), Map.of(
+            "role", user.getRole(),
+            "userId", user.getId()
+    ));
+
+    Map<String, Object> resp = new HashMap<>();
+    resp.put("success", true);
+    resp.put("accessToken", newAccessToken);
+    return ResponseEntity.ok(resp);
+}
+
+
+    // ==================== EXISTING ENDPOINTS (CONTINUED) ====================
 
     @GetMapping("/test")
     public ResponseEntity<String> testServer() {
@@ -125,20 +311,8 @@ public class AuthController {
         }
     }
 
-//    // -------- Toggle Subscription ----------
-//    @PostMapping("/toggleSubscription")
-//    public ResponseEntity<Map<String, Object>> toggleSubscription(@RequestParam String email) {
-//        boolean updated = authService.toggleSubscription(email);
-//        Map<String, Object> response = new HashMap<>();
-//
-//        if (updated) {
-//            response.put("status", "success");
-//            response.put("message", "Subscription status updated");
-//        } else {
-//            response.put("status", "error");
-//            response.put("message", "User not found");
-//        }
-//
-//        return ResponseEntity.ok(response);
-//    }
+    @PostMapping("/debug/hash")
+public String generateHash(@RequestParam String password) {
+    return new BCryptPasswordEncoder().encode(password);
+}
 }
