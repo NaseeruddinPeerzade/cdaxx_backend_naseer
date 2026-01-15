@@ -4,6 +4,8 @@
     import com.example.cdaxVideo.DTO.ModuleResponseDTO;
     import com.example.cdaxVideo.DTO.StreakDayDTO;
     import com.example.cdaxVideo.DTO.StreakSummaryDTO;
+    import org.slf4j.Logger;
+    import org.slf4j.LoggerFactory;
     import com.example.cdaxVideo.DTO.VideoResponseDTO;
     import com.example.cdaxVideo.Entity.*;
     import com.example.cdaxVideo.Repository.CourseRepository;
@@ -18,7 +20,6 @@
     import com.example.cdaxVideo.DTO.StreakSummaryDTO;
     import com.example.cdaxVideo.DTO.StreakDayDTO;
     import java.time.LocalDate;
-
     import org.springframework.beans.factory.annotation.Autowired;
     import org.springframework.http.HttpStatus;
     import org.springframework.http.ResponseEntity;
@@ -35,6 +36,8 @@ import java.util.*;
 
         @Autowired
         private CourseService courseService;
+
+        private static final Logger logger = LoggerFactory.getLogger(CourseController.class);
 
         @Autowired
         private UserCoursePurchaseRepository userCoursePurchaseRepository; 
@@ -302,38 +305,60 @@ public ResponseEntity<Map<String, Object>> getModulesByCourse(
         boolean isPurchased = userCoursePurchaseRepository
                 .existsByUserIdAndCourseId(userId, courseId);
 
-        // 3️⃣ Build base response
+        // 3️⃣ Build response ALWAYS
         Map<String, Object> response = new HashMap<>();
         response.put("courseId", course.getId());
         response.put("courseTitle", course.getTitle());
         response.put("isPurchased", isPurchased);
 
-        // 4️⃣ Calculate module count and total duration
-        int moduleCount = course.getModules() != null ? course.getModules().size() : 0;
-        int totalDurationSec = 0;
-        if (course.getModules() != null) {
-            for (Module module : course.getModules()) {
-                if (module.getVideos() != null) {
-                    for (Video video : module.getVideos()) {
-                        totalDurationSec += video.getDuration(); // duration in seconds
+        // 4️⃣ Create CourseResponseDTO with modules (ALWAYS)
+        CourseResponseDTO courseDTO = new CourseResponseDTO(course);
+        courseDTO.setIsPurchased(isPurchased);
+        courseDTO.setIsSubscribed(isPurchased);
+
+        // 5️⃣ Apply progress if purchased, otherwise set defaults
+        if (isPurchased) {
+            applyUserVideoProgress(courseDTO, userId, true);
+        } else {
+            // For non-purchased users:
+            // - First module unlocked
+            // - First 3 videos of first module unlocked
+            // - Everything else locked
+            if (courseDTO.getModules() != null && !courseDTO.getModules().isEmpty()) {
+                for (int i = 0; i < courseDTO.getModules().size(); i++) {
+                    ModuleResponseDTO module = courseDTO.getModules().get(i);
+                    
+                    // First module is unlocked for non-purchased users
+                    module.setIsLocked(i > 0);
+                    
+                    // Handle videos in first module
+                    if (i == 0 && module.getVideos() != null) {
+                        for (int j = 0; j < module.getVideos().size(); j++) {
+                            VideoResponseDTO video = module.getVideos().get(j);
+                            // First video unlocked, others locked
+                            video.setIsLocked(j > 0);
+                            video.setIsCompleted(false);
+                        }
+                    } else {
+                        // Other modules: all videos locked
+                        if (module.getVideos() != null) {
+                            for (VideoResponseDTO video : module.getVideos()) {
+                                video.setIsLocked(true);
+                                video.setIsCompleted(false);
+                            }
+                        }
                     }
                 }
             }
         }
-        response.put("moduleCount", moduleCount);
-        response.put("totalDurationSec", totalDurationSec);
 
-        // 5️⃣ If purchased, return detailed module/video stats
+        // 6️⃣ Always add modules to response
+        response.put("modules", courseDTO.getModules());
+        response.put("totalModules", courseDTO.getTotalModules());
+        response.put("totalVideos", courseDTO.getTotalVideos());
+        
         if (isPurchased) {
-            CourseResponseDTO courseDTO = new CourseResponseDTO(course);
-            courseDTO.setIsPurchased(true);
-            courseDTO.setIsSubscribed(true);
-
-            applyUserVideoProgress(courseDTO, userId, true);
-
-            response.put("modules", courseDTO.getModules());          // detailed modules
-            response.put("totalModules", courseDTO.getTotalModules()); 
-            response.put("totalVideos", courseDTO.getTotalVideos());
+            // Add progress stats for purchased users
             response.put("completedModules", courseDTO.getCompletedModules());
             response.put("completedVideos", courseDTO.getCompletedVideos());
             response.put("progressPercent", courseDTO.getProgressPercent());
@@ -794,14 +819,40 @@ public ResponseEntity<?> getModule(@PathVariable Long id) {
 
 // In CourseController.java
 
+// Update this existing endpoint in your CourseController.java
+
 @GetMapping("/streak/course/{courseId}")
 public ResponseEntity<?> getCourseStreak(
         @PathVariable Long courseId,
-        @RequestParam Long userId) {
+        @RequestParam Long userId,
+        @RequestParam(required = false) String month) {  // NEW: Optional month parameter
     
     try {
-        StreakSummaryDTO streakSummary = streakService.getCourseStreak(userId, courseId);
+        logger.info("📊 Getting streak for user: {}, course: {}, month: {}", 
+                   userId, courseId, month != null ? month : "30-day");
+        
+        StreakSummaryDTO streakSummary;
+        
+        if (month != null && !month.isEmpty()) {
+            // Parse month parameter
+            String[] parts = month.split("-");
+            if (parts.length >= 2) {
+                int year = Integer.parseInt(parts[0]);
+                int monthNum = Integer.parseInt(parts[1]);
+                LocalDate monthDate = LocalDate.of(year, monthNum, 15);
+                
+                // Use month-based streak
+                streakSummary = streakService.getCourseStreakForMonth(userId, courseId, monthDate);
+            } else {
+                throw new IllegalArgumentException("Invalid month format. Use YYYY-MM");
+            }
+        } else {
+            // Use existing 30-day streak
+            streakSummary = streakService.getCourseStreak(userId, courseId);
+        }
+        
         return ResponseEntity.ok(streakSummary);
+        
     } catch (Exception e) {
         return ResponseEntity.badRequest().body(Map.of(
             "success", false,
@@ -842,18 +893,40 @@ public ResponseEntity<?> getDayDetails(
 }
 
 // Update the existing profile/streak endpoint
+// Update this endpoint to support month parameter
+
 @GetMapping("/profile/streak")
 public ResponseEntity<?> getStreak(
         @RequestParam Long userId,
-        @RequestParam(required = false) Long courseId) {
+        @RequestParam(required = false) Long courseId,
+        @RequestParam(required = false) String month) {  // NEW: Optional month parameter
     
     try {
         if (courseId != null) {
             // Course-specific streak
-            StreakSummaryDTO streak = streakService.getCourseStreak(userId, courseId);
+            StreakSummaryDTO streak;
+            
+            if (month != null && !month.isEmpty()) {
+                // Parse month parameter for month view
+                String[] parts = month.split("-");
+                if (parts.length >= 2) {
+                    int year = Integer.parseInt(parts[0]);
+                    int monthNum = Integer.parseInt(parts[1]);
+                    LocalDate monthDate = LocalDate.of(year, monthNum, 15);
+                    
+                    // Use month-based streak
+                    streak = streakService.getCourseStreakForMonth(userId, courseId, monthDate);
+                } else {
+                    throw new IllegalArgumentException("Invalid month format. Use YYYY-MM");
+                }
+            } else {
+                // Use existing 30-day streak
+                streak = streakService.getCourseStreak(userId, courseId);
+            }
+            
             return ResponseEntity.ok(streak);
         } else {
-            // Overview for all courses
+            // Overview for all courses (only 30-day view available for overview)
             Map<String, Object> overview = streakService.getUserStreakOverview(userId);
             return ResponseEntity.ok(overview);
         }
@@ -865,7 +938,59 @@ public ResponseEntity<?> getStreak(
     }
 }
 
+// Add this new endpoint to your CourseController.java
 
+@GetMapping("/streak/course/{courseId}/month")
+public ResponseEntity<?> getCourseStreakForMonth(
+        @PathVariable Long courseId,
+        @RequestParam Long userId,
+        @RequestParam(required = false) String month,  // Format: "2024-01" or "2024-01-15"
+        @RequestParam(required = false) Integer year,
+        @RequestParam(required = false) Integer monthNum) {
+    
+    try {
+        logger.info("📅 Request for month streak - User: {}, Course: {}, Month: {}", 
+                   userId, courseId, month);
+        
+        LocalDate monthDate;
+        
+        // Determine which parameter to use
+        if (month != null && !month.isEmpty()) {
+            // Parse month string (format: "2024-01" or "2024-01-15")
+            String[] parts = month.split("-");
+            if (parts.length >= 2) {
+                int yearValue = Integer.parseInt(parts[0]);
+                int monthValue = Integer.parseInt(parts[1]);
+                int dayValue = parts.length > 2 ? Integer.parseInt(parts[2]) : 15; // Default to middle of month
+                monthDate = LocalDate.of(yearValue, monthValue, dayValue);
+            } else {
+                throw new IllegalArgumentException("Invalid month format. Use YYYY-MM or YYYY-MM-DD");
+            }
+        } else if (year != null && monthNum != null) {
+            // Use year and monthNum parameters
+            monthDate = LocalDate.of(year, monthNum, 15); // Middle of month
+        } else {
+            // Default to current month
+            monthDate = LocalDate.now();
+        }
+        
+        logger.info("📅 Processing streak for month: {}-{}", monthDate.getYear(), monthDate.getMonth());
+        
+        // Call the month-based service method
+        StreakSummaryDTO streakSummary = streakService.getCourseStreakForMonth(
+            userId, courseId, monthDate);
+        
+        return ResponseEntity.ok(streakSummary);
+        
+    } catch (Exception e) {
+        logger.error("❌ Error getting month streak: {}", e.getMessage(), e);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+            "success", false,
+            "error", "Failed to get streak data for month: " + e.getMessage(),
+            "timestamp", new Date()
+        ));
+    }
+}
 
 
     // In CourseController.java

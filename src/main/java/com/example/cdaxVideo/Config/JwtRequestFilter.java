@@ -30,10 +30,31 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private CustomUserDetailsService userDetailsService;
     
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        // Skip filtering for OPTIONS requests
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+        
+        // Skip filtering for multipart/form-data requests (for now)
+        String contentType = request.getContentType();
+        if (contentType != null && contentType.startsWith("multipart/form-data")) {
+            System.out.println("⚠️ Skipping JWT filter for multipart request: " + request.getRequestURI());
+            return true;
+        }
+        
+        return false;
+    }
+    
+    @Override
     protected void doFilterInternal(HttpServletRequest request, 
                                     HttpServletResponse response, 
                                     FilterChain chain)
             throws ServletException, IOException {
+        
+        System.out.println("🔍 JWT Filter processing: " + request.getRequestURI());
+        System.out.println("🔍 Content-Type: " + request.getContentType());
+        System.out.println("🔍 Method: " + request.getMethod());
         
         final String requestTokenHeader = request.getHeader("Authorization");
            

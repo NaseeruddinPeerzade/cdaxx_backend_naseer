@@ -1,6 +1,7 @@
 package com.example.cdaxVideo.Service;
 
 import com.example.cdaxVideo.Entity.User;
+import java.io.IOException;
 import com.example.cdaxVideo.Entity.UserCoursePurchase;
 import com.example.cdaxVideo.Entity.UserSubscription;
 import com.example.cdaxVideo.Repository.UserCoursePurchaseRepository;
@@ -20,7 +21,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -424,5 +429,62 @@ public UserDTO getFullUserProfile(String email) {
             return basicInfo;
         }
     }
+
+public Map<String, Object> uploadProfileImage(MultipartFile file, Long userId) throws IOException {
+    System.out.println("📤 Uploading profile image for user ID: " + userId);
+    
+    // Validate file
+    if (file == null || file.isEmpty()) {
+        throw new RuntimeException("File is empty");
+    }
+    
+    // Validate file type
+    String contentType = file.getContentType();
+    if (contentType == null || !contentType.startsWith("image/")) {
+        throw new RuntimeException("Only image files are allowed. Received: " + contentType);
+    }
+    
+    // Get user by ID
+    User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+    
+    System.out.println("✅ User found: " + user.getEmail() + " (ID: " + user.getId() + ")");
+    
+    // Generate unique filename
+    String originalFilename = file.getOriginalFilename();
+    String fileExtension = originalFilename.substring(originalFilename.lastIndexOf("."));
+    String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
+    
+    // Create uploads directory if it doesn't exist
+    Path uploadDir = Paths.get("uploads/profile-images");
+    if (!Files.exists(uploadDir)) {
+        Files.createDirectories(uploadDir);
+        System.out.println("✅ Created upload directory: " + uploadDir.toAbsolutePath());
+    }
+    
+    // Save file
+    Path filePath = uploadDir.resolve(uniqueFilename);
+    Files.copy(file.getInputStream(), filePath);
+    
+    System.out.println("✅ File saved: " + filePath.toAbsolutePath());
+    
+    // Construct URL for the uploaded file
+    String imageUrl = "/uploads/profile-images/" + uniqueFilename;
+    
+    // Update user's profile image in database (user is already fetched above)
+    user.setProfileImage(imageUrl);
+    userRepository.save(user);
+    
+    System.out.println("✅ User profile image updated in database: " + imageUrl);
+    
+    // Prepare response
+    Map<String, Object> response = new HashMap<>();
+    response.put("success", true);
+    response.put("message", "Image uploaded successfully");
+    response.put("imageUrl", imageUrl);
+    response.put("filename", uniqueFilename);
+    
+    return response;
+}
 
 }

@@ -12,6 +12,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -315,4 +316,50 @@ public ResponseEntity<Map<String, Object>> refreshToken(@RequestBody Map<String,
 public String generateHash(@RequestParam String password) {
     return new BCryptPasswordEncoder().encode(password);
 }
+
+    @PostMapping("/profile/upload-image")
+    public ResponseEntity<Map<String, Object>> uploadProfileImage(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader("Authorization") String authHeader) {
+        
+        System.out.println("📤 Profile image upload via AuthController");
+        
+        try {
+            // Manual JWT validation
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "message", "Authentication required"
+                ));
+            }
+            
+            String token = authHeader.substring(7);
+            String email = jwtTokenUtil.getUsernameFromToken(token);
+            
+            if (email == null || !jwtTokenUtil.validateToken(token)) {
+                return ResponseEntity.status(401).body(Map.of(
+                    "success", false,
+                    "message", "Invalid token"
+                ));
+            }
+            
+            User user = authService.getUserByEmail(email);
+            if (user == null) {
+                return ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "message", "User not found"
+                ));
+            }
+            
+            Map<String, Object> result = authService.uploadProfileImage(file, user.getId());
+            return ResponseEntity.ok(result);
+            
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "success", false,
+                "message", "Upload failed: " + e.getMessage()
+            ));
+        }
+    }
+
 }

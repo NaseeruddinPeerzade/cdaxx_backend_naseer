@@ -54,7 +54,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/verify-email").permitAll()
                 .requestMatchers("/api/auth/firstName").permitAll()
                 .requestMatchers("/api/auth/getUserByEmail").permitAll()
-                
+                .requestMatchers(
+                    "/api/auth/**",  // This matches ALL /api/auth/* endpoints including upload-image!
+                    "/api/public/**",
+                    "/uploads/**"
+                ).permitAll()
+                .requestMatchers("/api/auth/profile/upload-image").authenticated()
                 // ✅ CRITICAL FIX: Public course endpoints with ALL HTTP METHODS
                 .requestMatchers("/api/courses/public/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
@@ -92,7 +97,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/videos/*/complete").authenticated()
                 
                 // Assessment endpoints - REQUIRE AUTH
-                .requestMatchers("/api/course/assessment/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/modules/*/assessments").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/modules/*/assessments").authenticated()
                 .requestMatchers("/api/assessments/**").authenticated()
                 .requestMatchers("/api/modules/*/assessments").authenticated()
                 .requestMatchers("/api/courses/*/assessments").authenticated()

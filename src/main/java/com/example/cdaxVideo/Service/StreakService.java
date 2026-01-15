@@ -1,3 +1,5 @@
+// Replace your entire StreakService.java with this complete version:
+
 package com.example.cdaxVideo.Service;
 
 import com.example.cdaxVideo.DTO.*;
@@ -29,9 +31,8 @@ public class StreakService {
     private static final Logger logger = LoggerFactory.getLogger(StreakService.class);
     private static final int STREAK_CYCLE_DAYS = 30;
     
-    /**
-     * Update streak for a user when they watch a video
-     */
+    // ========== UPDATE STREAK METHODS ==========
+    
     @Transactional
     public void updateStreakForVideoWatch(Long userId, Long courseId, Long videoId, 
                                           Integer watchedSeconds, boolean isCompleted) {
@@ -61,7 +62,7 @@ public class StreakService {
                     newStreak.setCourse(course);
                     newStreak.setStreakDate(today);
                     newStreak.setCreatedAt(LocalDateTime.now());
-                    newStreak.setIsActiveDay(false); // Will be set to true below
+                    newStreak.setIsActiveDay(false);
                     newStreak.setWatchedSeconds(0);
                     newStreak.setCompletedVideosCount(0);
                     newStreak.setProgressPercentage(0.0);
@@ -77,27 +78,15 @@ public class StreakService {
             streak.addWatchedSeconds(watchedSeconds);
             logger.info("⏱️ Updated watched seconds: {} -> {}", previousWatched, streak.getWatchedSeconds());
             
-            // Update total available seconds (all videos in course) if not set
+            // Update total available seconds if not set
             if (streak.getTotalAvailableSeconds() == 0) {
                 logger.info("📊 Calculating total available seconds for course: {}", course.getTitle());
                 
-                // Get all modules in course
-                List<Module> modules = moduleRepository.findByCourseId(courseId);
-                int totalDuration = 0;
-                int totalVideos = 0;
+                int[] totals = calculateCourseTotals(courseId);
+                streak.setTotalAvailableSeconds(totals[0]);
+                streak.setTotalVideosCount(totals[1]);
                 
-                for (Module module : modules) {
-                    List<Video> moduleVideos = videoRepository.findByModuleId(module.getId());
-                    totalVideos += moduleVideos.size();
-                    for (Video v : moduleVideos) {
-                        totalDuration += v.getDuration();
-                    }
-                }
-                
-                streak.setTotalAvailableSeconds(totalDuration);
-                streak.setTotalVideosCount(totalVideos);
-                
-                logger.info("📈 Course has {} videos with total {} seconds", totalVideos, totalDuration);
+                logger.info("📈 Course has {} videos with total {} seconds", totals[1], totals[0]);
             }
             
             // Update video counts
@@ -108,7 +97,7 @@ public class StreakService {
                           previousCompleted, streak.getCompletedVideosCount());
             }
             
-            // ✅ CRITICAL FIX: Calculate progress percentage
+            // ✅ Calculate progress percentage
             if (streak.getTotalAvailableSeconds() > 0) {
                 double progress = ((double) streak.getWatchedSeconds() / streak.getTotalAvailableSeconds()) * 100;
                 streak.setProgressPercentage(progress);
@@ -126,15 +115,16 @@ public class StreakService {
             
         } catch (Exception e) {
             logger.error("❌ Error updating streak: {}", e.getMessage(), e);
-            // Don't throw - streak update shouldn't fail video completion
         }
     }
+    
+    // ========== GET STREAK METHODS ==========
     
     /**
      * Get 30-day streak for a specific course
      */
     public StreakSummaryDTO getCourseStreak(Long userId, Long courseId) {
-        logger.info("📊 Getting streak for user: {}, course: {}", userId, courseId);
+        logger.info("📊 Getting 30-day streak for user: {}, course: {}", userId, courseId);
         
         LocalDate endDate = LocalDate.now();
         LocalDate startDate = endDate.minusDays(STREAK_CYCLE_DAYS - 1);
@@ -145,7 +135,31 @@ public class StreakService {
         logger.info("📅 Found {} streak records between {} and {}", 
                    streaks.size(), startDate, endDate);
         
-        return buildStreakSummary(userId, courseId, streaks, startDate, endDate);
+        return buildStreakSummary(userId, courseId, streaks, startDate, endDate, false);
+    }
+    
+    /**
+     * Get month-based streak for a specific course
+     */
+    public StreakSummaryDTO getCourseStreakForMonth(Long userId, Long courseId, LocalDate monthDate) {
+        logger.info("📊 Getting month streak for user: {}, course: {}, month: {}-{}", 
+                   userId, courseId, monthDate.getYear(), monthDate.getMonth());
+        
+        // Get first and last day of the month
+        LocalDate firstDay = monthDate.withDayOfMonth(1);
+        LocalDate lastDay = monthDate.withDayOfMonth(monthDate.lengthOfMonth());
+        
+        logger.info("📅 Month range: {} to {} ({} days)", 
+                   firstDay, lastDay, monthDate.lengthOfMonth());
+        
+        // Get streaks for the entire month
+        List<UserStreak> streaks = userStreakRepository
+            .findByUserIdAndCourseIdAndStreakDateBetween(userId, courseId, firstDay, lastDay);
+        
+        logger.info("📅 Found {} streak records for month {}-{}", 
+                   streaks.size(), monthDate.getYear(), monthDate.getMonth());
+        
+        return buildStreakSummary(userId, courseId, streaks, firstDay, lastDay, true);
     }
     
     /**
@@ -176,7 +190,7 @@ public class StreakService {
                        course.getTitle(), courseStreaks.size());
             
             StreakSummaryDTO summary = buildStreakSummary(
-                userId, course.getId(), courseStreaks, startDate, endDate);
+                userId, course.getId(), courseStreaks, startDate, endDate, false);
             courseSummaries.add(summary);
         }
         
@@ -227,24 +241,28 @@ public class StreakService {
         return dto;
     }
     
+    // ========== BUILD STREAK SUMMARY METHODS ==========
+    
     /**
-     * Build 30-day calendar with empty days filled in
+     * Build streak summary - unified method for both 30-day and month views
      */
     private StreakSummaryDTO buildStreakSummary(Long userId, Long courseId, 
                                                 List<UserStreak> streaks, 
-                                                LocalDate startDate, LocalDate endDate) {
+                                                LocalDate startDate, LocalDate endDate,
+                                                boolean isMonthView) {
         
         Course course = courseRepository.findById(courseId)
             .orElseThrow(() -> new RuntimeException("Course not found"));
         
-        logger.info("📅 Building streak summary for course: {}", course.getTitle());
+        logger.info("📅 Building {} streak summary for course: {}", 
+                   isMonthView ? "month" : "30-day", course.getTitle());
         
         // Create map for quick lookup
         Map<LocalDate, UserStreak> streakMap = streaks.stream()
             .collect(Collectors.toMap(UserStreak::getStreakDate, s -> s));
         
-        // Build 30-day calendar
-        List<StreakDayDTO> dayCalendar = new ArrayList<>();
+        // Build day calendar
+        List<StreakDayDTO> days = new ArrayList<>();
         LocalDate currentDate = startDate;
         
         while (!currentDate.isAfter(endDate)) {
@@ -253,27 +271,26 @@ public class StreakService {
                 StreakDayDTO dayDTO = convertToDayDTO(streak);
                 
                 // Fetch video details for active days
-                if (streak.getIsActiveDay()) {
+                if (Boolean.TRUE.equals(streak.getIsActiveDay())) {
                     List<VideoProgressDetailDTO> videoDetails = getVideoDetailsForDay(userId, courseId, currentDate);
                     dayDTO.setVideoDetails(videoDetails);
                 }
                 
-                dayCalendar.add(dayDTO);
+                days.add(dayDTO);
             } else {
-                dayCalendar.add(createEmptyDayDTO(currentDate));
+                days.add(createEmptyDayDTO(currentDate));
             }
             currentDate = currentDate.plusDays(1);
         }
         
         // Calculate streak stats
-        int currentStreak = calculateCurrentStreak(dayCalendar);
-        int longestStreak = calculateLongestStreak(dayCalendar);
+        int currentStreak = calculateCurrentStreak(days);
+        int longestStreak = calculateLongestStreak(days);
         
-        double overallProgress = streaks.stream()
-            .mapToDouble(UserStreak::getProgressPercentage)
-            .average()
-            .orElse(0.0);
+        // Calculate progress
+        double overallProgress = calculateOverallProgress(days);
         
+        // Create summary
         StreakSummaryDTO summary = new StreakSummaryDTO();
         summary.setCourseId(courseId);
         summary.setCourseTitle(course.getTitle());
@@ -281,10 +298,29 @@ public class StreakService {
         summary.setLongestStreakDays(longestStreak);
         summary.setOverallProgress(overallProgress);
         summary.setLastActiveDate(getLastActiveDate(streaks));
-        summary.setLast30Days(dayCalendar);
         
-        logger.info("📈 Streak summary calculated: {} days current, {} days longest, {}% overall", 
-                   currentStreak, longestStreak, String.format("%.2f", overallProgress));
+        // Set appropriate day list
+        if (isMonthView) {
+            summary.setMonthDays(days);
+            summary.setMonthStartDate(startDate);
+            summary.setMonthEndDate(endDate);
+            summary.setMonthName(getMonthName(startDate.getMonthValue()));
+            summary.setYear(startDate.getYear());
+            
+            // Calculate month-specific stats
+            int activeDays = (int) days.stream()
+                .filter(day -> Boolean.TRUE.equals(day.getIsActiveDay()))
+                .count();
+            summary.setActiveDaysInMonth(activeDays);
+            summary.setTotalDaysInMonth(startDate.lengthOfMonth());
+            
+            logger.info("📈 Month streak calculated: {} days current, {} days longest, {} active days, {:.1f}% progress", 
+                       currentStreak, longestStreak, activeDays, overallProgress);
+        } else {
+            summary.setLast30Days(days);
+            logger.info("📈 30-day streak calculated: {} days current, {} days longest, {:.1f}% overall", 
+                       currentStreak, longestStreak, overallProgress);
+        }
         
         return summary;
     }
@@ -299,10 +335,7 @@ public class StreakService {
         dto.setProgressPercentage(streak.getProgressPercentage());
         dto.setIsActiveDay(streak.getIsActiveDay());
         dto.setColorCode(getColorCode(streak.getProgressPercentage()));
-        
-        // Initialize videoDetails as empty list
-        dto.setVideoDetails(new ArrayList<>());
-        
+        dto.setVideoDetails(new ArrayList<>()); // Will be populated later if needed
         return dto;
     }
     
@@ -314,10 +347,7 @@ public class StreakService {
         dto.setProgressPercentage(0.0);
         dto.setIsActiveDay(false);
         dto.setColorCode(getColorCode(0.0));
-        
-        // Initialize videoDetails as empty list
         dto.setVideoDetails(new ArrayList<>());
-        
         return dto;
     }
     
@@ -329,7 +359,6 @@ public class StreakService {
             LocalDateTime startOfDay = date.atStartOfDay();
             LocalDateTime endOfDay = date.plusDays(1).atStartOfDay();
             
-            // Use the repository method to fetch video progress for this day
             List<UserVideoProgress> progressList = userVideoProgressRepository
                 .findByUserIdAndCourseIdAndDateRange(userId, courseId, startOfDay, endOfDay);
             
@@ -342,7 +371,6 @@ public class StreakService {
                 .collect(Collectors.toList());
         } catch (Exception e) {
             logger.error("❌ Error getting video details for day {}: {}", date, e.getMessage());
-            // Return empty list if there's an error
             return new ArrayList<>();
         }
     }
@@ -364,12 +392,30 @@ public class StreakService {
         dto.setVideoProgress(videoProgress);
         dto.setIsCompleted(progress.isCompleted());
         
-        // Set watched date
         if (progress.getLastUpdatedAt() != null) {
             dto.setWatchedDate(progress.getLastUpdatedAt().toLocalDate());
         }
         
         return dto;
+    }
+    
+    /**
+     * Calculate course totals (duration and video count)
+     */
+    private int[] calculateCourseTotals(Long courseId) {
+        List<Module> modules = moduleRepository.findByCourseId(courseId);
+        int totalDuration = 0;
+        int totalVideos = 0;
+        
+        for (Module module : modules) {
+            List<Video> moduleVideos = videoRepository.findByModuleId(module.getId());
+            totalVideos += moduleVideos.size();
+            for (Video v : moduleVideos) {
+                totalDuration += v.getDuration();
+            }
+        }
+        
+        return new int[]{totalDuration, totalVideos};
     }
     
     /**
@@ -384,25 +430,52 @@ public class StreakService {
         return "#10B981"; // Green for 100%
     }
     
+    /**
+     * Calculate current streak from days list
+     */
     private int calculateCurrentStreak(List<StreakDayDTO> days) {
         int streak = 0;
-        // Count backwards from today
-        for (int i = days.size() - 1; i >= 0; i--) {
-            if (days.get(i).getIsActiveDay()) {
+        LocalDate today = LocalDate.now();
+        
+        // Sort days newest first
+        List<StreakDayDTO> sortedDays = new ArrayList<>(days);
+        sortedDays.sort((a, b) -> b.getDate().compareTo(a.getDate()));
+        
+        for (StreakDayDTO day : sortedDays) {
+            if (day.getDate().isAfter(today)) {
+                continue; // Skip future dates
+            }
+            
+            if (day.getDate().equals(today)) {
+                // Today - check if there's significant progress
+                if (day.getProgressPercentage() != null && day.getProgressPercentage() >= 5.0) {
+                    streak++;
+                } else {
+                    break;
+                }
+            } else if (Boolean.TRUE.equals(day.getIsActiveDay())) {
                 streak++;
             } else {
                 break;
             }
         }
+        
         return streak;
     }
     
+    /**
+     * Calculate longest streak from days list
+     */
     private int calculateLongestStreak(List<StreakDayDTO> days) {
         int maxStreak = 0;
         int currentStreak = 0;
         
-        for (StreakDayDTO day : days) {
-            if (day.getIsActiveDay()) {
+        // Sort chronologically
+        List<StreakDayDTO> sortedDays = new ArrayList<>(days);
+        sortedDays.sort(Comparator.comparing(StreakDayDTO::getDate));
+        
+        for (StreakDayDTO day : sortedDays) {
+            if (Boolean.TRUE.equals(day.getIsActiveDay())) {
                 currentStreak++;
                 maxStreak = Math.max(maxStreak, currentStreak);
             } else {
@@ -413,16 +486,42 @@ public class StreakService {
         return maxStreak;
     }
     
+    /**
+     * Calculate overall progress from days list
+     */
+    private double calculateOverallProgress(List<StreakDayDTO> days) {
+        // Calculate average progress of active days
+        return days.stream()
+            .filter(day -> Boolean.TRUE.equals(day.getIsActiveDay()))
+            .mapToDouble(StreakDayDTO::getProgressPercentage)
+            .average()
+            .orElse(0.0);
+    }
+    
+    /**
+     * Get last active date from streaks
+     */
     private LocalDate getLastActiveDate(List<UserStreak> streaks) {
         return streaks.stream()
-            .filter(UserStreak::getIsActiveDay)
+            .filter(streak -> Boolean.TRUE.equals(streak.getIsActiveDay()))
             .map(UserStreak::getStreakDate)
             .max(LocalDate::compareTo)
             .orElse(null);
     }
     
     /**
-     * Get today's streak data for a user and course
+     * Get month name from month number
+     */
+    private String getMonthName(int month) {
+        String[] monthNames = {
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        };
+        return monthNames[month - 1];
+    }
+    
+    /**
+     * Get today's streak data
      */
     public UserStreak getTodayStreak(Long userId, Long courseId) {
         LocalDate today = LocalDate.now();
@@ -432,18 +531,16 @@ public class StreakService {
     }
     
     /**
-     * Get streak history for debugging
+     * Get streak for specific date
      */
-/**
- * Get streak data for a specific date
- */
-public UserStreak getStreakForDate(Long userId, Long courseId, LocalDate date) {
-    return userStreakRepository
-        .findByUserIdAndCourseIdAndStreakDate(userId, courseId, date)
-        .orElse(null);
-}
+    public UserStreak getStreakForDate(Long userId, Long courseId, LocalDate date) {
+        return userStreakRepository
+            .findByUserIdAndCourseIdAndStreakDate(userId, courseId, date)
+            .orElse(null);
+    }
+    
     /**
-     * Test method to manually create streak data (for debugging)
+     * Create test streak data (for debugging)
      */
     @Transactional
     public UserStreak createTestStreak(Long userId, Long courseId, LocalDate date, int watchedSeconds) {
@@ -453,7 +550,6 @@ public UserStreak getStreakForDate(Long userId, Long courseId, LocalDate date) {
             Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new RuntimeException("Course not found"));
             
-            // Check if streak already exists
             Optional<UserStreak> existing = userStreakRepository
                 .findByUserIdAndCourseIdAndStreakDate(userId, courseId, date);
             
@@ -462,7 +558,6 @@ public UserStreak getStreakForDate(Long userId, Long courseId, LocalDate date) {
                 return existing.get();
             }
             
-            // Create new streak
             UserStreak streak = new UserStreak();
             streak.setUser(user);
             streak.setCourse(course);
@@ -472,25 +567,12 @@ public UserStreak getStreakForDate(Long userId, Long courseId, LocalDate date) {
             streak.setIsActiveDay(true);
             streak.setWatchedSeconds(watchedSeconds);
             
-            // Calculate course totals
-            List<Module> modules = moduleRepository.findByCourseId(courseId);
-            int totalDuration = 0;
-            int totalVideos = 0;
+            int[] totals = calculateCourseTotals(courseId);
+            streak.setTotalAvailableSeconds(totals[0]);
+            streak.setTotalVideosCount(totals[1]);
             
-            for (Module module : modules) {
-                List<Video> moduleVideos = videoRepository.findByModuleId(module.getId());
-                totalVideos += moduleVideos.size();
-                for (Video v : moduleVideos) {
-                    totalDuration += v.getDuration();
-                }
-            }
-            
-            streak.setTotalAvailableSeconds(totalDuration);
-            streak.setTotalVideosCount(totalVideos);
-            
-            // Calculate progress
-            if (totalDuration > 0) {
-                double progress = ((double) watchedSeconds / totalDuration) * 100;
+            if (totals[0] > 0) {
+                double progress = ((double) watchedSeconds / totals[0]) * 100;
                 streak.setProgressPercentage(progress);
             }
             
