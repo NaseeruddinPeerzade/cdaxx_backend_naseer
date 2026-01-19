@@ -23,7 +23,8 @@
     import org.springframework.beans.factory.annotation.Autowired;
     import org.springframework.http.HttpStatus;
     import org.springframework.http.ResponseEntity;
-    import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
 
 
 import java.util.*;
@@ -769,23 +770,50 @@ public ResponseEntity<?> getModule(@PathVariable Long id) {
     }
 
     // Add this to CourseController
-    @GetMapping("/course/assessment/can-attempt")
-    public ResponseEntity<?> canAttemptAssessment(
-            @RequestParam Long userId,
-            @RequestParam Long assessmentId) {
+@GetMapping("/course/assessment/can-attempt")
+public ResponseEntity<?> canAttemptAssessment(
+        @RequestParam(required = false) Long assessmentId,
+        @RequestParam(required = false) Long userId) {
+    
+    // Handle OPTIONS pre-flight request
+    if (assessmentId == null) {
+        return ResponseEntity.ok(Map.of(
+            "message", "CORS pre-flight check",
+            "status", "ok"
+        ));
+    }
+    
+    try {
+        System.out.println("🔍 /course/assessment/can-attempt called:");
+        System.out.println("   ├─ Assessment ID: " + assessmentId);
+        System.out.println("   ├─ User ID: " + userId);
         
-        try {
-            boolean canAttempt = courseService.canAttemptAssessment(userId, assessmentId);
-            return ResponseEntity.ok(Map.of(
-                "canAttempt", canAttempt
-            ));
-        } catch (Exception e) {
+        if (userId == null) {
             return ResponseEntity.badRequest().body(Map.of(
                 "success", false,
-                "error", e.getMessage()
+                "error", "User ID is required"
             ));
         }
+        
+        boolean canAttempt = courseService.canAttemptAssessment(userId, assessmentId);
+        
+        System.out.println("   ✅ Service result: " + canAttempt);
+        
+        return ResponseEntity.ok(Map.of(
+            "canAttempt", canAttempt,
+            "success", true
+        ));
+        
+    } catch (Exception e) {
+        System.out.println("❌ Error in canAttemptAssessment: " + e.getMessage());
+        e.printStackTrace();
+        
+        return ResponseEntity.badRequest().body(Map.of(
+            "success", false,
+            "error", e.getMessage()
+        ));
     }
+}
 
 
         // ---------------------- PURCHASE / UNLOCK / PROGRESS APIs ----------------------
@@ -1091,43 +1119,5 @@ public ResponseEntity<?> getCourseStreakForMonth(
                 ));
             }
         }
-
-
-@GetMapping("/debug/assessment-status/{userId}/{assessmentId}")
-public ResponseEntity<?> debugAssessmentStatus(
-        @PathVariable Long userId,
-        @PathVariable Long assessmentId) {
-    
-    User user = userRepository.findById(userId).orElseThrow();
-    Assessment assessment = assessmentRepository.findById(assessmentId).orElseThrow();
-    Module module = assessment.getModule();
-    
-    List<Video> videos = videoRepository.findByModuleId(module.getId());
-    
-    List<Map<String, Object>> videoStatus = new ArrayList<>();
-    for (Video video : videos) {
-        Map<String, Object> status = new HashMap<>();
-        status.put("videoId", video.getId());
-        status.put("videoTitle", video.getTitle());
-        
-        Optional<UserVideoProgress> uvp = userVideoProgressRepository
-                .findByUserAndVideo(user, video);
-        
-        status.put("hasProgress", uvp.isPresent());
-        status.put("isUnlocked", uvp.map(UserVideoProgress::isUnlocked).orElse(false));
-        status.put("isCompleted", uvp.map(UserVideoProgress::isCompleted).orElse(false));
-        
-        videoStatus.add(status);
-    }
-    
-    return ResponseEntity.ok(Map.of(
-        "assessmentId", assessmentId,
-        "assessmentTitle", assessment.getTitle(),
-        "moduleId", module.getId(),
-        "totalVideos", videos.size(),
-        "videoStatus", videoStatus
-    ));
-}
-
     }
 

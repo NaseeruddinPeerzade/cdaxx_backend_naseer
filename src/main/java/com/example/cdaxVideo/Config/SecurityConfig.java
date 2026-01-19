@@ -60,12 +60,18 @@ public class SecurityConfig {
                     "/uploads/**"
                 ).permitAll()
                 .requestMatchers("/api/auth/profile/upload-image").authenticated()
+                
                 // ✅ CRITICAL FIX: Public course endpoints with ALL HTTP METHODS
                 .requestMatchers("/api/courses/public/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/courses/*").permitAll() // Single wildcard
+                .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()  // Single wildcard
                 .requestMatchers(HttpMethod.GET, "/api/courses/**").permitAll() // Double wildcard
                 
+                // ✅ NEW FIX: Add assessment endpoints to public routes
+                .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll() // Add this line
+                .requestMatchers(HttpMethod.GET, "/api/assessments/**").permitAll() // Add this line
+                .requestMatchers(HttpMethod.GET, "/api/modules/*/assessments").permitAll() // This already exists
+                .requestMatchers(HttpMethod.GET, "/api/course/assessment/status").permitAll()
                 // Public video endpoints
                 .requestMatchers("/api/videos/public/**").permitAll()
                 
@@ -96,15 +102,14 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/videos/*/progress").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/videos/*/complete").authenticated()
                 
-                // Assessment endpoints - REQUIRE AUTH
-                .requestMatchers(HttpMethod.GET, "/api/modules/*/assessments").permitAll()
+                // Assessment endpoints - Mixed (GET public, POST requires auth)
                 .requestMatchers(HttpMethod.POST, "/api/modules/*/assessments").authenticated()
-                .requestMatchers("/api/assessments/**").authenticated()
-                .requestMatchers("/api/modules/*/assessments").authenticated()
-                .requestMatchers("/api/courses/*/assessments").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()
                 
                 // Favorites and cart - REQUIRE AUTH
                 .requestMatchers("/api/favorites/**").authenticated()
+                .requestMatchers("/api/dashboard/**").authenticated() // Dashboard requires auth
                 .requestMatchers("/api/cart/**").authenticated()
                 
                 // User data - REQUIRE AUTH
