@@ -80,13 +80,20 @@ public class SecurityConfig {
                 .requestMatchers("/api/courses/public/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/courses/**").permitAll()
                 
-                // Public assessment endpoints
+                // Public assessment endpoints (FIXED PATTERNS)
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/assessments/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/modules/*/assessments").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/modules/{id}/assessments").permitAll() // Keep only one, not both
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/status").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/course/assessment/can-attempt").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/course/assessment/questions").permitAll()
+
+                // Assessment submissions require authentication (FIXED PATTERNS)
+                .requestMatchers(HttpMethod.POST, "/api/modules/{id}/assessments").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/course/assessment/submit").authenticated()
                 
                 // Public video endpoints
                 .requestMatchers("/api/videos/public/**").permitAll()
@@ -116,18 +123,13 @@ public class SecurityConfig {
                 .requestMatchers("/api/courses/subscribed/**").authenticated()
                 .requestMatchers("/api/courses/user/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/courses").authenticated()
-                .requestMatchers(HttpMethod.PUT, "/api/courses/**").authenticated()
-                .requestMatchers(HttpMethod.DELETE, "/api/courses/**").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/courses/{id}").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/courses/{id}").authenticated()
                 .requestMatchers("/api/courses/{id}/enroll").authenticated()
                 
                 // Video progress
-                .requestMatchers(HttpMethod.POST, "/api/videos/*/progress").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/videos/*/complete").authenticated()
-                
-                // Assessment submissions
-                .requestMatchers(HttpMethod.POST, "/api/modules/*/assessments").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/videos/{id}/progress").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/videos/{id}/complete").authenticated()
                 
                 // User data
                 .requestMatchers("/api/favorites/**").authenticated()
@@ -149,7 +151,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // ✅ FIXED: Allow Render and Vercel domains with wildcards
+        // Allow Render and Vercel domains with wildcards
         configuration.setAllowedOriginPatterns(List.of(
             // Local development
             "http://localhost:*",
