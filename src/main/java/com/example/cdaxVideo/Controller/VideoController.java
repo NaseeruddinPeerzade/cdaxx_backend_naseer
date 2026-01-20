@@ -23,7 +23,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/videos")
-@CrossOrigin(origins = "*")
 public class VideoController {
     @Autowired
     private UserRepository userRepository; 
@@ -40,7 +39,7 @@ public class VideoController {
      * POST /api/videos/{videoId}/complete
      * Marks a video as completed
      */
-@PostMapping("/{videoId}/complete")
+@PostMapping("/{videoId}/complete") 
 public ResponseEntity<Map<String, Object>> markVideoAsCompleted(
         @PathVariable Long videoId,
         @RequestParam Long userId,

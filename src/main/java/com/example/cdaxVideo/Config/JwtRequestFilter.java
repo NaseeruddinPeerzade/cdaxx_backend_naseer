@@ -1,10 +1,7 @@
 package com.example.cdaxVideo.Config;
 
 import com.example.cdaxVideo.Service.CustomUserDetailsService;
-
 import io.jsonwebtoken.ExpiredJwtException;
-
-import com.example.cdaxVideo.Config.JwtTokenUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,20 +27,10 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private CustomUserDetailsService userDetailsService;
     
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
-        // Skip filtering for OPTIONS requests
-        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
-            return true;
-        }
-        
-        // Skip filtering for multipart/form-data requests (for now)
-        String contentType = request.getContentType();
-        if (contentType != null && contentType.startsWith("multipart/form-data")) {
-            System.out.println("⚠️ Skipping JWT filter for multipart request: " + request.getRequestURI());
-            return true;
-        }
-        
-        return false;
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        // ✅ FIXED: Only skip OPTIONS requests for CORS preflight
+        // DO NOT skip multipart requests - they need authentication too!
+        return "OPTIONS".equalsIgnoreCase(request.getMethod());
     }
     
     @Override
@@ -52,71 +39,87 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                                     FilterChain chain)
             throws ServletException, IOException {
         
-        System.out.println("🔍 JWT Filter processing: " + request.getRequestURI());
-        System.out.println("🔍 Content-Type: " + request.getContentType());
-        System.out.println("🔍 Method: " + request.getMethod());
+        // Log request details for debugging
+        String requestPath = request.getRequestURI();
+        String method = request.getMethod();
+        String contentType = request.getContentType();
+        
+        System.out.println("\n=== JWT Filter Debug ===");
+        System.out.println("Path: " + requestPath);
+        System.out.println("Method: " + method);
+        System.out.println("Content-Type: " + contentType);
         
         final String requestTokenHeader = request.getHeader("Authorization");
-           
+        System.out.println("Authorization Header Present: " + (requestTokenHeader != null));
+        
         String username = null;
         String jwtToken = null;
         
-        // JWT Token is in the form "Bearer token". Remove Bearer word and get only the Token
+        // Extract JWT token from Authorization header
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
             jwtToken = requestTokenHeader.substring(7);
+            System.out.println("JWT Token Length: " + jwtToken.length());
+            
             try {
                 username = jwtTokenUtil.getUsernameFromToken(jwtToken);
+                System.out.println("Extracted Username: " + username);
             } catch (IllegalArgumentException e) {
-                System.out.println("   ❌ Unable to get JWT Token: " + e.getMessage());
+                System.out.println("❌ Unable to get JWT Token: " + e.getMessage());
             } catch (ExpiredJwtException e) {
-                System.out.println("   ⚠️ JWT Token has expired");
+                System.out.println("⚠️ JWT Token has expired");
             } catch (Exception e) {
-                System.out.println("   ❌ Error parsing token: " + e.getClass().getName() + " - " + e.getMessage());
+                System.out.println("❌ Error parsing token: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             }
         } else {
-            System.out.println("   ⚠️ JWT Token does not begin with Bearer String or no Authorization header");
             if (requestTokenHeader != null) {
-                System.out.println("   ⚠️ Actual header starts with: '" + 
-                    (requestTokenHeader.length() > 7 ? requestTokenHeader.substring(0, 7) : requestTokenHeader) + "'");
+                System.out.println("⚠️ Invalid Authorization format. Starts with: '" + 
+                    requestTokenHeader.substring(0, Math.min(requestTokenHeader.length(), 10)) + "'");
+            } else {
+                System.out.println("⚠️ No Authorization header present");
             }
         }
         
-        // Once we get the token validate it.
+        // Validate token and set authentication
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            System.out.println("🔐 Loading user details for: " + username);
             
-            System.out.println("   🔐 Attempting to load user: " + username);
             try {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
                 
-                // if token is valid configure Spring Security to manually set authentication
                 if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
-                    
-                    System.out.println("   ✅ Token validated for user: " + username);
+                    System.out.println("✅ Token validated successfully");
                     
                     UsernamePasswordAuthenticationToken authentication = 
                         new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                            userDetails, 
+                            null, 
+                            userDetails.getAuthorities()
+                        );
                     
-                    // After setting the Authentication in the context, we specify
-                    // that the current user is authenticated. So it passes the Spring Security Configurations successfully.
+                    authentication.setDetails(
+                        new WebAuthenticationDetailsSource().buildDetails(request)
+                    );
+                    
                     SecurityContextHolder.getContext().setAuthentication(authentication);
-                    System.out.println("   ✅ Authentication set in SecurityContext");
+                    System.out.println("✅ Authentication set in SecurityContext");
                 } else {
-                    System.out.println("   ❌ Token validation failed for user: " + username);
+                    System.out.println("❌ Token validation failed");
                 }
             } catch (UsernameNotFoundException e) {
-                System.out.println("   ❌ User not found: " + username);
+                System.out.println("❌ User not found: " + username);
+            } catch (Exception e) {
+                System.out.println("❌ Error loading user: " + e.getMessage());
+                e.printStackTrace();
             }
         } else {
             if (username == null) {
-                System.out.println("   ⚠️ Username is null, skipping authentication");
+                System.out.println("ℹ️ No username extracted - proceeding without authentication");
             } else {
-                System.out.println("   ⚠️ Authentication already exists in context");
+                System.out.println("ℹ️ Authentication already exists in context");
             }
         }
         
-        System.out.println("   ➡️ Proceeding with filter chain...");
+        System.out.println("➡️ Continuing filter chain...");
         chain.doFilter(request, response);
     }
 }

@@ -23,8 +23,8 @@
     import org.springframework.beans.factory.annotation.Autowired;
     import org.springframework.http.HttpStatus;
     import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.*;
+    import org.springframework.security.core.userdetails.UserDetails;
+    import org.springframework.web.bind.annotation.*;
 
 
 import java.util.*;
@@ -32,7 +32,6 @@ import java.util.*;
 
     @RestController
     @RequestMapping("/api")
-    @CrossOrigin(origins = "*")
     public class CourseController {
 
         @Autowired

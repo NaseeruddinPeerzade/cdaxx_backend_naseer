@@ -9,7 +9,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/favorites")
-@CrossOrigin(origins = "*")
 public class FavoriteCourseController {
     private final FavoriteCourseService favoriteService;
     
