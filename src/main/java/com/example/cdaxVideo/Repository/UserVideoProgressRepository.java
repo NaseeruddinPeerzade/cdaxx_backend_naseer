@@ -32,21 +32,21 @@ public interface UserVideoProgressRepository extends JpaRepository<UserVideoProg
     List<UserVideoProgress> findByVideoId(Long videoId);
 
 
-    // NEW METHOD for streak functionality - add this with your other methods
-@Query("SELECT uvp FROM UserVideoProgress uvp " +
-       "JOIN uvp.video v " +
-       "JOIN v.module m " +
-       "JOIN m.course c " +
-       "WHERE uvp.user.id = :userId " +
-       "AND c.id = :courseId " +
-       "AND uvp.lastUpdatedAt >= :startDateTime " +
-       "AND uvp.lastUpdatedAt < :endDateTime " +
-       "AND uvp.watchedSeconds > 0 " +
-       "ORDER BY uvp.lastUpdatedAt DESC")
-List<UserVideoProgress> findByUserIdAndCourseIdAndDateRange(
-    @Param("userId") Long userId,
-    @Param("courseId") Long courseId,
-    @Param("startDateTime") LocalDateTime startDateTime,
-    @Param("endDateTime") LocalDateTime endDateTime
-);
+    // ✅ ADD THIS NEW METHOD with JOIN FETCH
+    @Query("SELECT uvp FROM UserVideoProgress uvp " +
+           "JOIN FETCH uvp.video v " +  // ✅ FETCH video eagerly
+           "JOIN v.module m " +
+           "JOIN m.course c " +
+           "WHERE uvp.user.id = :userId " +
+           "AND c.id = :courseId " +
+           "AND uvp.lastUpdatedAt >= :startDateTime " +
+           "AND uvp.lastUpdatedAt < :endDateTime " +
+           "AND uvp.watchedSeconds > 0 " +
+           "ORDER BY uvp.lastUpdatedAt DESC")
+    List<UserVideoProgress> findByUserIdAndCourseIdAndDateRangeWithVideo(
+        @Param("userId") Long userId,
+        @Param("courseId") Long courseId,
+        @Param("startDateTime") LocalDateTime startDateTime,
+        @Param("endDateTime") LocalDateTime endDateTime
+    );
 }

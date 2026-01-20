@@ -1,5 +1,3 @@
-// Replace your entire StreakService.java with this complete version:
-
 package com.example.cdaxVideo.Service;
 
 import com.example.cdaxVideo.DTO.*;
@@ -14,11 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Transactional  // ADD THIS - Makes all methods transactional
 public class StreakService {
     
     private final UserStreakRepository userStreakRepository;
@@ -123,6 +123,7 @@ public class StreakService {
     /**
      * Get 30-day streak for a specific course
      */
+    @Transactional(readOnly = true)  // ADD THIS
     public StreakSummaryDTO getCourseStreak(Long userId, Long courseId) {
         logger.info("📊 Getting 30-day streak for user: {}, course: {}", userId, courseId);
         
@@ -141,6 +142,7 @@ public class StreakService {
     /**
      * Get month-based streak for a specific course
      */
+    @Transactional(readOnly = true)  // ADD THIS
     public StreakSummaryDTO getCourseStreakForMonth(Long userId, Long courseId, LocalDate monthDate) {
         logger.info("📊 Getting month streak for user: {}, course: {}, month: {}-{}", 
                    userId, courseId, monthDate.getYear(), monthDate.getMonth());
@@ -165,6 +167,7 @@ public class StreakService {
     /**
      * Get streak for all courses (profile page)
      */
+    @Transactional(readOnly = true)  // ADD THIS
     public Map<String, Object> getUserStreakOverview(Long userId) {
         logger.info("📊 Getting streak overview for user: {}", userId);
         
@@ -214,6 +217,7 @@ public class StreakService {
     /**
      * Get detailed day information
      */
+    @Transactional(readOnly = true)  // ADD THIS - CRITICAL FIX
     public StreakDayDTO getDayDetails(Long userId, Long courseId, LocalDate date) {
         logger.info("📅 Getting day details for user: {}, course: {}, date: {}", 
                    userId, courseId, date);
@@ -246,6 +250,7 @@ public class StreakService {
     /**
      * Build streak summary - unified method for both 30-day and month views
      */
+    @Transactional(readOnly = true)  // ADD THIS
     private StreakSummaryDTO buildStreakSummary(Long userId, Long courseId, 
                                                 List<UserStreak> streaks, 
                                                 LocalDate startDate, LocalDate endDate,
@@ -354,54 +359,64 @@ public class StreakService {
     /**
      * Get video progress details for a specific day
      */
+    @Transactional(readOnly = true)  // ADD THIS - CRITICAL FIX
     private List<VideoProgressDetailDTO> getVideoDetailsForDay(Long userId, Long courseId, LocalDate date) {
         try {
             LocalDateTime startOfDay = date.atStartOfDay();
             LocalDateTime endOfDay = date.plusDays(1).atStartOfDay();
             
             List<UserVideoProgress> progressList = userVideoProgressRepository
-                .findByUserIdAndCourseIdAndDateRange(userId, courseId, startOfDay, endOfDay);
+                .findByUserIdAndCourseIdAndDateRangeWithVideo(userId, courseId, startOfDay, endOfDay);
             
             if (progressList == null || progressList.isEmpty()) {
+                logger.info("📭 No video progress found for date {}", date);
                 return new ArrayList<>();
             }
             
-            return progressList.stream()
-                .map(this::convertToVideoProgressDetailDTO)
-                .collect(Collectors.toList());
+            logger.info("📹 Found {} video progress records for date {}", progressList.size(), date);
+            
+            List<VideoProgressDetailDTO> details = new ArrayList<>();
+            for (UserVideoProgress progress : progressList) {
+                try {
+                    Video video = progress.getVideo();  // ✅ Now this works within transaction
+                    
+                    VideoProgressDetailDTO dto = new VideoProgressDetailDTO();
+                    dto.setVideoId(video.getId());
+                    dto.setVideoTitle(video.getTitle());
+                    dto.setWatchedSeconds(progress.getWatchedSeconds());
+                    dto.setVideoDuration(video.getDuration());
+                    
+                    // Calculate progress percentage
+                    double videoProgress = 0.0;
+                    if (video.getDuration() != null && video.getDuration() > 0) {
+                        videoProgress = (progress.getWatchedSeconds() * 100.0) / video.getDuration();
+                    }
+                    dto.setVideoProgress(videoProgress);
+                    dto.setIsCompleted(progress.isCompleted());
+                    
+                    if (progress.getLastUpdatedAt() != null) {
+                        dto.setWatchedDate(progress.getLastUpdatedAt().toLocalDate());
+                    }
+                    
+                    details.add(dto);
+                    
+                } catch (Exception e) {
+                    logger.error("❌ Error converting progress {}: {}", progress.getId(), e.getMessage());
+                }
+            }
+            
+            return details;
+            
         } catch (Exception e) {
-            logger.error("❌ Error getting video details for day {}: {}", date, e.getMessage());
+            logger.error("❌ Error getting video details for day {}: {}", date, e.getMessage(), e);
             return new ArrayList<>();
         }
-    }
-    
-    private VideoProgressDetailDTO convertToVideoProgressDetailDTO(UserVideoProgress progress) {
-        Video video = progress.getVideo();
-        VideoProgressDetailDTO dto = new VideoProgressDetailDTO();
-        
-        dto.setVideoId(video.getId());
-        dto.setVideoTitle(video.getTitle());
-        dto.setWatchedSeconds(progress.getWatchedSeconds());
-        dto.setVideoDuration(video.getDuration());
-        
-        // Calculate progress percentage
-        double videoProgress = 0.0;
-        if (video.getDuration() != null && video.getDuration() > 0) {
-            videoProgress = (progress.getWatchedSeconds() * 100.0) / video.getDuration();
-        }
-        dto.setVideoProgress(videoProgress);
-        dto.setIsCompleted(progress.isCompleted());
-        
-        if (progress.getLastUpdatedAt() != null) {
-            dto.setWatchedDate(progress.getLastUpdatedAt().toLocalDate());
-        }
-        
-        return dto;
     }
     
     /**
      * Calculate course totals (duration and video count)
      */
+    @Transactional(readOnly = true)  // ADD THIS
     private int[] calculateCourseTotals(Long courseId) {
         List<Module> modules = moduleRepository.findByCourseId(courseId);
         int totalDuration = 0;
@@ -523,6 +538,7 @@ public class StreakService {
     /**
      * Get today's streak data
      */
+    @Transactional(readOnly = true)  // ADD THIS
     public UserStreak getTodayStreak(Long userId, Long courseId) {
         LocalDate today = LocalDate.now();
         return userStreakRepository
@@ -533,6 +549,7 @@ public class StreakService {
     /**
      * Get streak for specific date
      */
+    @Transactional(readOnly = true)  // ADD THIS
     public UserStreak getStreakForDate(Long userId, Long courseId, LocalDate date) {
         return userStreakRepository
             .findByUserIdAndCourseIdAndStreakDate(userId, courseId, date)
