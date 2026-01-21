@@ -91,6 +91,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/questions").permitAll()
 
                 // Assessment submissions require authentication
+                .requestMatchers(HttpMethod.GET, "/api/test/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/modules/{moduleId}/assessments").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()

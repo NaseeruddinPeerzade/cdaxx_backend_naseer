@@ -1,59 +1,31 @@
 // DebugController.java
 package com.example.cdaxVideo.Controller;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.*;
 
+
 @RestController
-@RequestMapping("/api/debug")
+@RequestMapping("/api/test")
 public class DebugController {
     
-    @GetMapping("/security-status")
-    public Map<String, Object> securityStatus(HttpServletRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("timestamp", new Date());
-        response.put("requestPath", request.getServletPath());
-        response.put("authentication", auth != null ? auth.getName() : "null");
-        response.put("isAuthenticated", auth != null && auth.isAuthenticated());
-        response.put("authorities", auth != null ? auth.getAuthorities().toString() : "null");
-        
-        // Headers
-        Map<String, String> headers = new HashMap<>();
-        Enumeration<String> headerNames = request.getHeaderNames();
-        while (headerNames.hasMoreElements()) {
-            String headerName = headerNames.nextElement();
-            headers.put(headerName, request.getHeader(headerName));
-        }
-        response.put("headers", headers);
-        
-        return response;
+    // Test 1: Exact same pattern but in different controller
+    @GetMapping("/modules/{moduleId}/assessments")
+    public ResponseEntity<String> testEndpoint(@PathVariable Long moduleId) {
+        return ResponseEntity.ok("Test endpoint works! Module: " + moduleId);
     }
     
-    @GetMapping("/test-public")
-    public Map<String, String> testPublic() {
-        return Map.of(
-            "message", "This is a public endpoint",
-            "timestamp", new Date().toString(),
-            "status", "OK"
-        );
-    }
-    
-    @GetMapping("/test-protected")
-    public Map<String, String> testProtected() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return Map.of(
-            "message", "This is a protected endpoint",
-            "user", auth != null ? auth.getName() : "anonymous",
-            "timestamp", new Date().toString(),
-            "status", "OK"
-        );
+    // Test 2: In the same controller but different method
+    @GetMapping("/{moduleId}/test")
+    public ResponseEntity<String> testModule(@PathVariable Long moduleId) {
+        return ResponseEntity.ok("Module test works: " + moduleId);
     }
 }
