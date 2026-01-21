@@ -80,20 +80,16 @@ public class SecurityConfig {
                 .requestMatchers("/api/courses/public/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/modules/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/videos/**").permitAll()
                 
-                // Public assessment endpoints (FIXED PATTERNS)
-                .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
+                // =============== ASSESSMENT ENDPOINTS ===============
+                // ALL assessment GET endpoints public (for testing)
                 .requestMatchers(HttpMethod.GET, "/api/assessments/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/modules/{id}/assessments").permitAll() // Keep only one, not both
-                .requestMatchers(HttpMethod.GET, "/api/course/assessment/status").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/course/assessment/can-attempt").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/course/assessment/questions").permitAll()
-
-                // Assessment submissions require authentication (FIXED PATTERNS)
-                .requestMatchers(HttpMethod.POST, "/api/modules/{id}/assessments").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/course/assessment/submit").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/modules/**/assessments").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/assessments/**/questions").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/questions/**").permitAll()
                 
                 // Public video endpoints
                 .requestMatchers("/api/videos/public/**").permitAll()
@@ -114,6 +110,13 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 
                 // =============== PROTECTED ENDPOINTS ===============
+                // Assessment POST endpoints require auth
+                .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/modules/**/assessments").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/questions/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/course/assessment/submit").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
+                
                 // User profile endpoints
                 .requestMatchers("/api/auth/profile/**").authenticated()
                 .requestMatchers("/api/auth/jwt/me").authenticated()
@@ -126,7 +129,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/api/courses/{id}").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/api/courses/{id}").authenticated()
                 .requestMatchers("/api/courses/{id}/enroll").authenticated()
-
 
                 // Streak endpoints (ALL require authentication)
                 .requestMatchers(HttpMethod.GET, "/api/streak/**").authenticated()
@@ -141,6 +143,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/dashboard/**").authenticated()
                 .requestMatchers("/api/cart/**").authenticated()
                 .requestMatchers("/api/users/**").authenticated()
+                
+                // Purchase endpoints
+                .requestMatchers(HttpMethod.POST, "/api/purchase").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/modules/**/unlock-**").authenticated()
                 
                 // Default - all other requests require authentication
                 .anyRequest().authenticated()
