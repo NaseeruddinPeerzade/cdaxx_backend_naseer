@@ -6,8 +6,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -22,8 +20,6 @@ import java.io.IOException;
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
     
-    private static final Logger logger = LoggerFactory.getLogger(JwtRequestFilter.class);
-    
     @Autowired
     private JwtTokenUtil jwtTokenUtil;
     
@@ -31,62 +27,99 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private CustomUserDetailsService userDetailsService;
     
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        // ✅ FIXED: Only skip OPTIONS requests for CORS preflight
+        // DO NOT skip multipart requests - they need authentication too!
+        return "OPTIONS".equalsIgnoreCase(request.getMethod());
+    }
+    
+    @Override
     protected void doFilterInternal(HttpServletRequest request, 
                                     HttpServletResponse response, 
                                     FilterChain chain)
             throws ServletException, IOException {
         
-        logger.info("🚀 JWT FILTER EXECUTING for: {} {}", request.getMethod(), request.getRequestURI());
+        // Log request details for debugging
+        String requestPath = request.getRequestURI();
+        String method = request.getMethod();
+        String contentType = request.getContentType();
+        
+        System.out.println("\n=== JWT Filter Debug ===");
+        System.out.println("Path: " + requestPath);
+        System.out.println("Method: " + method);
+        System.out.println("Content-Type: " + contentType);
         
         final String requestTokenHeader = request.getHeader("Authorization");
+        System.out.println("Authorization Header Present: " + (requestTokenHeader != null));
         
         String username = null;
         String jwtToken = null;
         
-        // JWT Token is in the form "Bearer token". Remove Bearer word and get only the Token
+        // Extract JWT token from Authorization header
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
             jwtToken = requestTokenHeader.substring(7);
+            System.out.println("JWT Token Length: " + jwtToken.length());
+            
             try {
                 username = jwtTokenUtil.getUsernameFromToken(jwtToken);
-                logger.info("✅ Token valid for user: {}", username);
+                System.out.println("Extracted Username: " + username);
             } catch (IllegalArgumentException e) {
-                logger.error("❌ Unable to get JWT Token");
+                System.out.println("❌ Unable to get JWT Token: " + e.getMessage());
             } catch (ExpiredJwtException e) {
-                logger.warn("⚠️ JWT Token has expired");
+                System.out.println("⚠️ JWT Token has expired");
             } catch (Exception e) {
-                logger.error("❌ JWT Token validation failed: {}", e.getMessage());
+                System.out.println("❌ Error parsing token: " + e.getClass().getSimpleName() + " - " + e.getMessage());
             }
         } else {
-            logger.warn("⚠️ JWT Token does not begin with Bearer String");
+            if (requestTokenHeader != null) {
+                System.out.println("⚠️ Invalid Authorization format. Starts with: '" + 
+                    requestTokenHeader.substring(0, Math.min(requestTokenHeader.length(), 10)) + "'");
+            } else {
+                System.out.println("⚠️ No Authorization header present");
+            }
         }
         
-        // Once we get the token validate it.
+        // Validate token and set authentication
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            System.out.println("🔐 Loading user details for: " + username);
+            
             try {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
                 
-                // If token is valid configure Spring Security to manually set authentication
                 if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
+                    System.out.println("✅ Token validated successfully");
+                    
                     UsernamePasswordAuthenticationToken authentication = 
                         new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities()
+                            userDetails, 
+                            null, 
+                            userDetails.getAuthorities()
                         );
                     
                     authentication.setDetails(
                         new WebAuthenticationDetailsSource().buildDetails(request)
                     );
                     
-                    // After setting the Authentication in the context, we specify
-                    // that the current user is authenticated. So it passes the
-                    // Spring Security Configurations successfully.
                     SecurityContextHolder.getContext().setAuthentication(authentication);
-                    logger.info("✅ Authentication set for user: {}", username);
+                    System.out.println("✅ Authentication set in SecurityContext");
+                } else {
+                    System.out.println("❌ Token validation failed");
                 }
             } catch (UsernameNotFoundException e) {
-                logger.error("❌ User not found: {}", username);
+                System.out.println("❌ User not found: " + username);
+            } catch (Exception e) {
+                System.out.println("❌ Error loading user: " + e.getMessage());
+                e.printStackTrace();
+            }
+        } else {
+            if (username == null) {
+                System.out.println("ℹ️ No username extracted - proceeding without authentication");
+            } else {
+                System.out.println("ℹ️ Authentication already exists in context");
             }
         }
         
+        System.out.println("➡️ Continuing filter chain...");
         chain.doFilter(request, response);
     }
 }
