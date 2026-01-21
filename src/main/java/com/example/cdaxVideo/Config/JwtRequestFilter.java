@@ -2,6 +2,7 @@ package com.example.cdaxVideo.Config;
 
 import com.example.cdaxVideo.Service.CustomUserDetailsService;
 import io.jsonwebtoken.ExpiredJwtException;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,18 +28,30 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Autowired
     private CustomUserDetailsService userDetailsService;
     
+    // Debug constructor
+    public JwtRequestFilter() {
+        System.out.println("✅✅✅ JWT REQUEST FILTER CONSTRUCTOR CALLED!");
+    }
+    
+    @PostConstruct
+    public void init() {
+        System.out.println("✅✅✅ JWT FILTER INITIALIZED!");
+        System.out.println("   jwtTokenUtil: " + (jwtTokenUtil != null ? "INJECTED" : "NULL"));
+        System.out.println("   userDetailsService: " + (userDetailsService != null ? "INJECTED" : "NULL"));
+    }
+    
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
         String method = request.getMethod();
         
-        System.out.println("\n🎯 JWT Filter - shouldNotFilter()");
-        System.out.println("📍 Path: " + path);
+        System.out.println("\n🎯🎯🎯 JWT FILTER - shouldNotFilter() CALLED!");
         System.out.println("📍 Method: " + method);
+        System.out.println("📍 Path: " + path);
         
         // Skip OPTIONS (CORS preflight)
         if ("OPTIONS".equalsIgnoreCase(method)) {
-            System.out.println("✅ SKIP: OPTIONS (CORS Preflight)");
+            System.out.println("✅ SKIP: OPTIONS request");
             return true;
         }
         
@@ -72,35 +85,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             return true;
         }
         
-        // 🔥 ONLY SKIP THESE SPECIFIC PUBLIC ENDPOINTS (GET only)
-        if ("GET".equalsIgnoreCase(method)) {
-            // Course list
-            if (path.equals("/api/courses")) {
-                System.out.println("✅ SKIP: GET /api/courses (PUBLIC)");
-                return true;
-            }
-            
-            // Single course
-            if (path.matches("^/api/courses/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/courses/{id} (PUBLIC)");
-                return true;
-            }
-            
-            // Module details ONLY (NOT assessments!)
-            if (path.matches("^/api/modules/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/modules/{id} (PUBLIC - module details only)");
-                return true;
-            }
-            
-            // Video details ONLY (NOT progress!)
-            if (path.matches("^/api/videos/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/videos/{id} (PUBLIC - video details only)");
-                return true;
-            }
-        }
-        
-        // 🔒 Everything else requires JWT validation
-        System.out.println("🔒 VALIDATE: JWT required for this endpoint");
+        // TEMPORARY: FORCE FILTER TO RUN FOR ALL REQUESTS (for debugging)
+        System.out.println("🔒 FILTER WILL RUN FOR THIS REQUEST");
         return false;
     }
     
@@ -110,17 +96,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                                     FilterChain chain)
             throws ServletException, IOException {
         
-        String path = request.getServletPath();
-        System.out.println("\n🔐 JWT FILTER - Processing: " + request.getMethod() + " " + path);
+        System.out.println("\n🔐🔐🔐 JWT FILTER - doFilterInternal() EXECUTING!");
+        System.out.println("📍 Request: " + request.getMethod() + " " + request.getServletPath());
         
-        // Log headers for debugging
-        System.out.println("📋 Request Headers:");
+        // Log ALL headers
+        System.out.println("📋 ALL REQUEST HEADERS:");
         Collections.list(request.getHeaderNames()).forEach(headerName -> {
-            if (headerName.equalsIgnoreCase("authorization") || 
-                headerName.equalsIgnoreCase("content-type") ||
-                headerName.equalsIgnoreCase("accept")) {
-                System.out.println("   - " + headerName + ": " + request.getHeader(headerName));
-            }
+            System.out.println("   " + headerName + ": " + request.getHeader(headerName));
         });
         
         final String requestTokenHeader = request.getHeader("Authorization");
@@ -129,36 +111,31 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
             jwtToken = requestTokenHeader.substring(7);
-            System.out.println("🔑 Token found (length: " + jwtToken.length() + ")");
-            System.out.println("🔑 Token first 50 chars: " + jwtToken.substring(0, Math.min(50, jwtToken.length())) + "...");
+            System.out.println("🔑 Token extracted, length: " + jwtToken.length());
             
             try {
                 username = jwtTokenUtil.getUsernameFromToken(jwtToken);
-                System.out.println("👤 Username extracted from token: " + username);
-            } catch (IllegalArgumentException e) {
-                System.out.println("❌ Invalid JWT Token format: " + e.getMessage());
-            } catch (ExpiredJwtException e) {
-                System.out.println("⚠️ JWT Token expired");
+                System.out.println("👤 Username from token: " + username);
             } catch (Exception e) {
-                System.out.println("❌ JWT parsing error: " + e.getClass().getName() + " - " + e.getMessage());
+                System.out.println("❌ Error extracting username: " + e.getMessage());
                 e.printStackTrace();
             }
         } else {
-            System.out.println("⚠️ No Authorization header or doesn't start with 'Bearer '");
+            System.out.println("⚠️ No valid Authorization header found");
             if (requestTokenHeader != null) {
-                System.out.println("   Header value: " + requestTokenHeader);
+                System.out.println("   Actual header value: " + requestTokenHeader);
             }
         }
         
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+        if (username != null) {
+            System.out.println("🔍 Attempting to authenticate user: " + username);
+            
             try {
-                System.out.println("🔍 Loading user details for: " + username);
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-                System.out.println("✅ User found: " + userDetails.getUsername());
+                System.out.println("✅ UserDetails loaded successfully");
                 
-                System.out.println("🔍 Validating token...");
                 if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
-                    System.out.println("✅ Token valid");
+                    System.out.println("✅ Token validated successfully");
                     
                     UsernamePasswordAuthenticationToken authentication = 
                         new UsernamePasswordAuthenticationToken(
@@ -171,26 +148,21 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     System.out.println("✅ Authentication set in SecurityContext");
-                    System.out.println("   Principal: " + authentication.getPrincipal());
-                    System.out.println("   Authorities: " + authentication.getAuthorities());
                 } else {
                     System.out.println("❌ Token validation failed");
                 }
             } catch (UsernameNotFoundException e) {
                 System.out.println("❌ User not found: " + username);
             } catch (Exception e) {
-                System.out.println("❌ Error in user loading/validation: " + e.getMessage());
+                System.out.println("❌ Error during authentication: " + e.getMessage());
                 e.printStackTrace();
             }
         } else {
-            if (username == null) {
-                System.out.println("❌ No username extracted from token - will return 401");
-            } else {
-                System.out.println("ℹ️ Authentication already exists in context");
-            }
+            System.out.println("ℹ️ No username extracted, continuing without authentication");
         }
         
-        System.out.println("➡️ Continuing filter chain...");
+        System.out.println("➡️ Continuing to next filter in chain...");
         chain.doFilter(request, response);
+        System.out.println("🏁 JWT Filter completed for: " + request.getServletPath());
     }
 }
