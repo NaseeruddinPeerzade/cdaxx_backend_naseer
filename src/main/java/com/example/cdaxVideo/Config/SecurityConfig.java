@@ -81,15 +81,16 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()
                 
-                // Public assessment endpoints (FIXED PATTERNS)
+                // Public assessment endpoints - REORDERED FOR PRIORITY
+                // CRITICAL FIX: Move modules endpoint FIRST before any similar patterns
+                .requestMatchers(HttpMethod.GET, "/api/modules/*/assessments").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/assessments/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/modules/*/assessments").permitAll() // Keep only one, not both
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/status").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/can-attempt").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/questions").permitAll()
 
-                // Assessment submissions require authentication (FIXED PATTERNS)
+                // Assessment submissions require authentication
                 .requestMatchers(HttpMethod.POST, "/api/modules/*/assessments").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()
@@ -119,14 +120,14 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/jwt/me").authenticated()
                 .requestMatchers("/api/auth/change-password").authenticated()
                 
-                // Course management
+                // Course management - NOTE: Keep BELOW the specific modules endpoint
                 .requestMatchers("/api/courses/subscribed/**").authenticated()
                 .requestMatchers("/api/courses/user/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/courses").authenticated()
                 .requestMatchers(HttpMethod.PUT, "/api/courses/{id}").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/api/courses/{id}").authenticated()
+                // CRITICAL: This line was causing the conflict - it comes AFTER modules rule now
                 .requestMatchers("/api/courses/{id}/enroll").authenticated()
-
 
                 // Streak endpoints (ALL require authentication)
                 .requestMatchers(HttpMethod.GET, "/api/streak/**").authenticated()
