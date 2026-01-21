@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
@@ -26,11 +28,80 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Autowired
     private CustomUserDetailsService userDetailsService;
     
+    // List of public endpoints that don't need JWT validation
+    private static final List<String> PUBLIC_PATHS = Arrays.asList(
+        // Auth endpoints
+        "/api/auth/login",
+        "/api/auth/register",
+        "/api/auth/jwt/login",
+        "/api/auth/jwt/register",
+        "/api/auth/jwt/validate",
+        "/api/auth/jwt/refresh",
+        "/api/auth/forgot-password",
+        "/api/auth/reset-password",
+        "/api/auth/verify-email",
+        "/api/auth/firstName",
+        "/api/auth/getUserByEmail",
+        
+        // Public resources
+        "/uploads/",
+        
+        // Public GET endpoints
+        "/api/courses",
+        "/api/courses/",
+        "/api/courses/public/",
+        
+        // Debug endpoints
+        "/api/debug/",
+        
+        // THIS IS THE CRITICAL LINE - module assessments should be public
+        "/api/modules/",
+        "/api/videos/",
+        
+        // Swagger
+        "/swagger-ui/",
+        "/v3/api-docs/",
+        "/swagger-ui.html"
+    );
+    
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        // ✅ FIXED: Only skip OPTIONS requests for CORS preflight
-        // DO NOT skip multipart requests - they need authentication too!
-        return "OPTIONS".equalsIgnoreCase(request.getMethod());
+        String path = request.getServletPath();
+        String method = request.getMethod();
+        
+        System.out.println("\n🔍 JWT Filter Check - shouldNotFilter:");
+        System.out.println("   Path: " + path);
+        System.out.println("   Method: " + method);
+        
+        // Skip OPTIONS requests (CORS preflight)
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            System.out.println("   ✅ Skipping: OPTIONS request");
+            return true;
+        }
+        
+        // Check if path matches any public endpoint
+        for (String publicPath : PUBLIC_PATHS) {
+            if (path.startsWith(publicPath) && 
+                (publicPath.endsWith("/") || path.equals(publicPath) || path.startsWith(publicPath + "/"))) {
+                System.out.println("   ✅ Skipping: Public endpoint (" + publicPath + ")");
+                return true;
+            }
+        }
+        
+        // Special case: GET requests to module assessments should be public
+        if ("GET".equalsIgnoreCase(method) && path.matches("/api/modules/\\d+/assessments")) {
+            System.out.println("   ✅ Skipping: GET /api/modules/{id}/assessments (public)");
+            return true;
+        }
+        
+        // Special case: GET requests to courses by ID should be public
+        if ("GET".equalsIgnoreCase(method) && path.matches("/api/courses/\\d+")) {
+            System.out.println("   ✅ Skipping: GET /api/courses/{id} (public)");
+            return true;
+        }
+        
+        System.out.println("   ➡️ Will filter: Requires authentication");
+        return false;
     }
     
     @Override
@@ -39,44 +110,51 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                                     FilterChain chain)
             throws ServletException, IOException {
         
-        // Log request details for debugging
+        // Log request details
         String requestPath = request.getRequestURI();
         String method = request.getMethod();
-        String contentType = request.getContentType();
         
-        System.out.println("\n=== JWT Filter Debug ===");
+        System.out.println("\n=== JWT Filter Processing ===");
         System.out.println("Path: " + requestPath);
         System.out.println("Method: " + method);
-        System.out.println("Content-Type: " + contentType);
+        
+        // Since shouldNotFilter already skipped public endpoints, 
+        // we know this endpoint requires authentication
         
         final String requestTokenHeader = request.getHeader("Authorization");
-        System.out.println("Authorization Header Present: " + (requestTokenHeader != null));
         
-        String username = null;
-        String jwtToken = null;
-        
-        // Extract JWT token from Authorization header
-        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
-            jwtToken = requestTokenHeader.substring(7);
-            System.out.println("JWT Token Length: " + jwtToken.length());
+        if (requestTokenHeader == null || !requestTokenHeader.startsWith("Bearer ")) {
+            System.out.println("❌ Missing or invalid Authorization header");
+            System.out.println("Header value: " + requestTokenHeader);
             
-            try {
-                username = jwtTokenUtil.getUsernameFromToken(jwtToken);
-                System.out.println("Extracted Username: " + username);
-            } catch (IllegalArgumentException e) {
-                System.out.println("❌ Unable to get JWT Token: " + e.getMessage());
-            } catch (ExpiredJwtException e) {
-                System.out.println("⚠️ JWT Token has expired");
-            } catch (Exception e) {
-                System.out.println("❌ Error parsing token: " + e.getClass().getSimpleName() + " - " + e.getMessage());
-            }
-        } else {
-            if (requestTokenHeader != null) {
-                System.out.println("⚠️ Invalid Authorization format. Starts with: '" + 
-                    requestTokenHeader.substring(0, Math.min(requestTokenHeader.length(), 10)) + "'");
-            } else {
-                System.out.println("⚠️ No Authorization header present");
-            }
+            // For GET requests to certain endpoints, we might want to allow without auth
+            // but since shouldNotFilter didn't skip, we should require auth
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
+                "Unauthorized: No JWT token found or invalid format");
+            return;
+        }
+        
+        String jwtToken = requestTokenHeader.substring(7);
+        String username = null;
+        
+        try {
+            username = jwtTokenUtil.getUsernameFromToken(jwtToken);
+            System.out.println("Extracted Username: " + username);
+        } catch (IllegalArgumentException e) {
+            System.out.println("❌ Unable to get JWT Token: " + e.getMessage());
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
+                "Unauthorized: Unable to get JWT token");
+            return;
+        } catch (ExpiredJwtException e) {
+            System.out.println("⚠️ JWT Token has expired");
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
+                "Unauthorized: JWT Token has expired");
+            return;
+        } catch (Exception e) {
+            System.out.println("❌ Error parsing token: " + e.getMessage());
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
+                "Unauthorized: Invalid JWT token");
+            return;
         }
         
         // Validate token and set authentication
@@ -104,18 +182,21 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     System.out.println("✅ Authentication set in SecurityContext");
                 } else {
                     System.out.println("❌ Token validation failed");
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
+                        "Unauthorized: Invalid JWT token");
+                    return;
                 }
             } catch (UsernameNotFoundException e) {
                 System.out.println("❌ User not found: " + username);
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
+                    "Unauthorized: User not found");
+                return;
             } catch (Exception e) {
                 System.out.println("❌ Error loading user: " + e.getMessage());
                 e.printStackTrace();
-            }
-        } else {
-            if (username == null) {
-                System.out.println("ℹ️ No username extracted - proceeding without authentication");
-            } else {
-                System.out.println("ℹ️ Authentication already exists in context");
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
+                    "Unauthorized: Error processing authentication");
+                return;
             }
         }
         
