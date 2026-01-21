@@ -144,9 +144,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/cart/**").authenticated()
                 .requestMatchers("/api/users/**").authenticated()
                 
-                // Purchase endpoints
+                // Purchase endpoints - FIXED THIS LINE:
                 .requestMatchers(HttpMethod.POST, "/api/purchase").authenticated()
-                .requestMatchers(HttpMethod.POST, "/api/modules/**/unlock-**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/modules/**/unlock-*").authenticated()
                 
                 // Default - all other requests require authentication
                 .anyRequest().authenticated()
@@ -162,22 +162,26 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         
-        // Allow Render and Vercel domains with wildcards
+        // Allow Railway and other domains
         configuration.setAllowedOriginPatterns(List.of(
             // Local development
             "http://localhost:*",
             "http://127.0.0.1:*",
             "http://192.168.*:*",
             
-            // Render domains
-            "https://*.onrender.com",
+            // Railway domains
+            "https://*.up.railway.app",
+            "https://*.railway.app",
             
             // Vercel domains
             "https://*.vercel.app",
             
-            // Specific domains for safety
-            "https://cdax-app.onrender.com",
-            "https://cdax-app.vercel.app"
+            // Render domains
+            "https://*.onrender.com",
+            
+            // Allow all for testing (be careful in production)
+            "https://*",
+            "http://*"
         ));
 
         // Allowed HTTP methods
@@ -196,7 +200,8 @@ public class SecurityConfig {
             "Access-Control-Request-Headers",
             "X-CSRF-Token",
             "Cache-Control",
-            "Pragma"
+            "Pragma",
+            "x-auth-token"
         ));
         
         // Exposed headers (visible to browser)
@@ -204,7 +209,8 @@ public class SecurityConfig {
             "Authorization",
             "Content-Disposition",
             "Access-Control-Allow-Origin",
-            "Access-Control-Allow-Credentials"
+            "Access-Control-Allow-Credentials",
+            "x-auth-token"
         ));
         
         // Allow credentials (cookies, authorization headers)
