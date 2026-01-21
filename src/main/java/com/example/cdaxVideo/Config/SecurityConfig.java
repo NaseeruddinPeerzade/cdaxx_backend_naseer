@@ -1,198 +1,191 @@
+
 // ============================================
-// FILE 2: JwtRequestFilter.java (OPTIMIZED)
+// FILE 1: SecurityConfig.java
 // ============================================
 
 package com.example.cdaxVideo.Config;
 
-import com.example.cdaxVideo.Service.CustomUserDetailsService;
-import io.jsonwebtoken.ExpiredJwtException;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.io.IOException;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.List;
 
-@Component
-public class JwtRequestFilter extends OncePerRequestFilter {
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
     
-    @Autowired
-    private JwtTokenUtil jwtTokenUtil;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final JwtRequestFilter jwtRequestFilter;
     
-    @Autowired
-    private CustomUserDetailsService userDetailsService;
-    
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath();
-        String method = request.getMethod();
-        
-        // Log every request for debugging
-        System.out.println("\n🎯 JWT Filter - shouldNotFilter()");
-        System.out.println("📍 Path: " + path);
-        System.out.println("📍 Method: " + method);
-        
-        // Skip OPTIONS (CORS preflight)
-        if ("OPTIONS".equalsIgnoreCase(method)) {
-            System.out.println("✅ SKIP: OPTIONS (CORS Preflight)");
-            return true;
-        }
-        
-        // Skip auth endpoints
-        if (path.startsWith("/api/auth/")) {
-            System.out.println("✅ SKIP: Auth endpoint");
-            return true;
-        }
-        
-        // Skip uploads
-        if (path.startsWith("/uploads/")) {
-            System.out.println("✅ SKIP: Public uploads");
-            return true;
-        }
-        
-        // Skip Swagger
-        if (path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) {
-            System.out.println("✅ SKIP: Swagger");
-            return true;
-        }
-        
-        // Skip debug
-        if (path.startsWith("/api/debug/")) {
-            System.out.println("✅ SKIP: Debug endpoint");
-            return true;
-        }
-        
-        // Skip actuator
-        if (path.startsWith("/actuator/")) {
-            System.out.println("✅ SKIP: Actuator endpoint");
-            return true;
-        }
-        
-        // 🔥 ONLY SKIP THESE SPECIFIC PUBLIC ENDPOINTS (GET only)
-        if ("GET".equalsIgnoreCase(method)) {
-            // Course list
-            if (path.equals("/api/courses")) {
-                System.out.println("✅ SKIP: GET /api/courses (PUBLIC)");
-                return true;
-            }
-            
-            // Single course
-            if (path.matches("^/api/courses/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/courses/{id} (PUBLIC)");
-                return true;
-            }
-            
-            // Module details (NOT assessments!)
-            if (path.matches("^/api/modules/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/modules/{id} (PUBLIC)");
-                return true;
-            }
-            
-            // Video details (NOT progress!)
-            if (path.matches("^/api/videos/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/videos/{id} (PUBLIC)");
-                return true;
-            }
-        }
-        
-        // 🔒 Everything else requires JWT validation
-        System.out.println("🔒 VALIDATE: JWT required for this endpoint");
-        return false;
+    public SecurityConfig(JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint, 
+                         JwtRequestFilter jwtRequestFilter) {
+        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
+        this.jwtRequestFilter = jwtRequestFilter;
     }
     
-    @Override
-    protected void doFilterInternal(HttpServletRequest request, 
-                                    HttpServletResponse response, 
-                                    FilterChain chain)
-            throws ServletException, IOException {
-        
-        // Add debug headers to response
-        response.addHeader("X-JWT-Filter", "processed");
-        response.addHeader("X-Request-Path", request.getServletPath());
-        
-        String path = request.getServletPath();
-        System.out.println("\n🔐 JWT FILTER - VALIDATING TOKEN");
-        System.out.println("📍 Path: " + path);
-        System.out.println("📍 Method: " + request.getMethod());
-        
-        // Log headers for debugging
-        System.out.println("📋 Request Headers:");
-        Collections.list(request.getHeaderNames()).forEach(headerName -> {
-            String value = headerName.equals("Authorization") 
-                ? request.getHeader(headerName).substring(0, Math.min(20, request.getHeader(headerName).length())) + "..." 
-                : request.getHeader(headerName);
-            System.out.println("   - " + headerName + ": " + value);
-        });
-        
-        final String requestTokenHeader = request.getHeader("Authorization");
-        String username = null;
-        String jwtToken = null;
-        
-        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
-            jwtToken = requestTokenHeader.substring(7);
-            System.out.println("🔑 Token found (length: " + jwtToken.length() + ")");
-            
-            try {
-                username = jwtTokenUtil.getUsernameFromToken(jwtToken);
-                System.out.println("👤 Username extracted: " + username);
-            } catch (IllegalArgumentException e) {
-                System.out.println("❌ Invalid JWT Token format");
-            } catch (ExpiredJwtException e) {
-                System.out.println("⚠️ JWT Token expired");
-            } catch (Exception e) {
-                System.out.println("❌ JWT parsing error: " + e.getMessage());
-            }
-        } else {
-            System.out.println("⚠️ No Authorization header or doesn't start with 'Bearer '");
-            if (requestTokenHeader != null) {
-                System.out.println("   Header value: " + requestTokenHeader.substring(0, Math.min(20, requestTokenHeader.length())) + "...");
-            }
-        }
-        
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            try {
-                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .csrf(csrf -> csrf.disable())
+            .exceptionHandling(handling -> handling
+                .authenticationEntryPoint(jwtAuthenticationEntryPoint))
+            .sessionManagement(management -> management
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(authz -> authz
+                // =============== PUBLIC ENDPOINTS ===============
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
-                    System.out.println("✅ Token valid - Setting authentication");
-                    
-                    UsernamePasswordAuthenticationToken authentication = 
-                        new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities()
-                        );
-                    
-                    authentication.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
-                    
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    System.out.println("✅ Authentication set in SecurityContext");
-                } else {
-                    System.out.println("❌ Token validation failed");
-                }
-            } catch (UsernameNotFoundException e) {
-                System.out.println("❌ User not found: " + username);
-            } catch (Exception e) {
-                System.out.println("❌ Error loading user: " + e.getMessage());
-            }
-        } else {
-            if (username == null) {
-                System.out.println("❌ No username extracted from token");
-            } else {
-                System.out.println("ℹ️ Authentication already exists in context");
-            }
-        }
+                // Debug
+                .requestMatchers("/api/debug/**").permitAll()
+                
+                // Auth endpoints
+                .requestMatchers(
+                    "/api/auth/login",
+                    "/api/auth/register",
+                    "/api/auth/jwt/login",
+                    "/api/auth/jwt/register",
+                    "/api/auth/jwt/validate",
+                    "/api/auth/jwt/refresh",
+                    "/api/auth/forgot-password",
+                    "/api/auth/reset-password",
+                    "/api/auth/verify-email",
+                    "/api/auth/firstName",
+                    "/api/auth/getUserByEmail"
+                ).permitAll()
+                
+                // Public files
+                .requestMatchers("/uploads/**").permitAll()
+                
+                // Public course browsing (GET only)
+                .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/modules/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/videos/**").permitAll()
+                
+                // Swagger
+                .requestMatchers(
+                    "/swagger-ui/**",
+                    "/v3/api-docs/**",
+                    "/swagger-ui.html",
+                    "/webjars/**",
+                    "/swagger-resources/**"
+                ).permitAll()
+                
+                // Actuator
+                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                
+                // =============== PROTECTED ENDPOINTS ===============
+                // 🔒 ALL ASSESSMENT ENDPOINTS REQUIRE AUTH
+                .requestMatchers("/api/assessments/**").authenticated()
+                .requestMatchers("/api/modules/**/assessments").authenticated()
+                .requestMatchers("/api/course/assessment/**").authenticated()
+                .requestMatchers("/api/questions/**").authenticated()
+                
+                // User profile
+                .requestMatchers("/api/auth/profile/**").authenticated()
+                .requestMatchers("/api/auth/jwt/me").authenticated()
+                .requestMatchers("/api/auth/change-password").authenticated()
+                
+                // Course management
+                .requestMatchers("/api/courses/subscribed/**").authenticated()
+                .requestMatchers("/api/courses/user/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/courses").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/courses/{id}").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/courses/{id}").authenticated()
+                .requestMatchers("/api/courses/{id}/enroll").authenticated()
+
+                // Streak
+                .requestMatchers("/api/streak/**").authenticated()
+                .requestMatchers("/api/profile/streak").authenticated()
+                
+                // Video progress
+                .requestMatchers(HttpMethod.POST, "/api/videos/{id}/progress").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/videos/{id}/complete").authenticated()
+                
+                // User data
+                .requestMatchers("/api/favorites/**").authenticated()
+                .requestMatchers("/api/dashboard/**").authenticated()
+                .requestMatchers("/api/cart/**").authenticated()
+                .requestMatchers("/api/users/**").authenticated()
+                
+                // Purchase
+                .requestMatchers(HttpMethod.POST, "/api/purchase").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/modules/*/unlock-*").authenticated()
+                
+                // Default
+                .anyRequest().authenticated()
+            );
         
-        System.out.println("➡️ Continuing filter chain...");
-        chain.doFilter(request, response);
+        http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
+        
+        return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        
+        configuration.setAllowedOriginPatterns(List.of(
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+            "http://192.168.*:*",
+            "https://*.up.railway.app",
+            "https://*.railway.app",
+            "https://*.vercel.app",
+            "https://*.onrender.com",
+            "https://*",
+            "http://*"
+        ));
+
+        configuration.setAllowedMethods(Arrays.asList(
+            "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"
+        ));
+        
+        configuration.setAllowedHeaders(Arrays.asList(
+            "Authorization", "Content-Type", "Accept", "Origin",
+            "X-Requested-With", "Access-Control-Request-Method",
+            "Access-Control-Request-Headers", "X-CSRF-Token",
+            "Cache-Control", "Pragma", "x-auth-token"
+        ));
+        
+        configuration.setExposedHeaders(Arrays.asList(
+            "Authorization", "Content-Disposition",
+            "Access-Control-Allow-Origin",
+            "Access-Control-Allow-Credentials", "x-auth-token"
+        ));
+        
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
+        
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        
+        return source;
+    }
+    
+    @Bean
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration authenticationConfiguration) throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();
+    }
+    
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }

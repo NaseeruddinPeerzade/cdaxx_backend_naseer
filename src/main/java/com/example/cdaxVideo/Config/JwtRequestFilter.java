@@ -1,7 +1,3 @@
-// ============================================
-// FILE 2: JwtRequestFilter.java (OPTIMIZED)
-// ============================================
-
 package com.example.cdaxVideo.Config;
 
 import com.example.cdaxVideo.Service.CustomUserDetailsService;
@@ -20,7 +16,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
 
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
@@ -36,76 +31,61 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
         String method = request.getMethod();
         
-        // Log every request for debugging
-        System.out.println("\n🎯 JWT Filter - shouldNotFilter()");
-        System.out.println("📍 Path: " + path);
-        System.out.println("📍 Method: " + method);
+        System.out.println("🔍 JWT Filter Check: " + method + " " + path);
         
         // Skip OPTIONS (CORS preflight)
         if ("OPTIONS".equalsIgnoreCase(method)) {
-            System.out.println("✅ SKIP: OPTIONS (CORS Preflight)");
+            System.out.println("   ✅ Skip: OPTIONS request");
             return true;
         }
         
         // Skip auth endpoints
         if (path.startsWith("/api/auth/")) {
-            System.out.println("✅ SKIP: Auth endpoint");
+            System.out.println("   ✅ Skip: Auth endpoint");
             return true;
         }
         
         // Skip uploads
         if (path.startsWith("/uploads/")) {
-            System.out.println("✅ SKIP: Public uploads");
+            System.out.println("   ✅ Skip: Public uploads");
             return true;
         }
         
         // Skip Swagger
         if (path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs")) {
-            System.out.println("✅ SKIP: Swagger");
+            System.out.println("   ✅ Skip: Swagger");
             return true;
         }
         
         // Skip debug
         if (path.startsWith("/api/debug/")) {
-            System.out.println("✅ SKIP: Debug endpoint");
-            return true;
-        }
-        
-        // Skip actuator
-        if (path.startsWith("/actuator/")) {
-            System.out.println("✅ SKIP: Actuator endpoint");
+            System.out.println("   ✅ Skip: Debug endpoint");
             return true;
         }
         
         // 🔥 ONLY SKIP THESE SPECIFIC PUBLIC ENDPOINTS (GET only)
         if ("GET".equalsIgnoreCase(method)) {
-            // Course list
-            if (path.equals("/api/courses")) {
-                System.out.println("✅ SKIP: GET /api/courses (PUBLIC)");
-                return true;
-            }
-            
-            // Single course
-            if (path.matches("^/api/courses/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/courses/{id} (PUBLIC)");
+            // Course list and single course
+            if (path.equals("/api/courses") || path.matches("^/api/courses/\\d+$")) {
+                System.out.println("   ✅ Skip: Public course browsing");
                 return true;
             }
             
             // Module details (NOT assessments!)
             if (path.matches("^/api/modules/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/modules/{id} (PUBLIC)");
+                System.out.println("   ✅ Skip: Public module details");
                 return true;
             }
             
             // Video details (NOT progress!)
             if (path.matches("^/api/videos/\\d+$")) {
-                System.out.println("✅ SKIP: GET /api/videos/{id} (PUBLIC)");
+                System.out.println("   ✅ Skip: Public video details");
                 return true;
             }
         }
         
-        // 🔒 Everything else requires JWT validation
-        System.out.println("🔒 VALIDATE: JWT required for this endpoint");
+        // 🔒 Everything else (including /api/modules/{id}/assessments) requires JWT
+        System.out.println("   🔒 Validate: JWT required");
         return false;
     }
     
@@ -115,23 +95,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                                     FilterChain chain)
             throws ServletException, IOException {
         
-        // Add debug headers to response
-        response.addHeader("X-JWT-Filter", "processed");
-        response.addHeader("X-Request-Path", request.getServletPath());
-        
         String path = request.getServletPath();
-        System.out.println("\n🔐 JWT FILTER - VALIDATING TOKEN");
-        System.out.println("📍 Path: " + path);
-        System.out.println("📍 Method: " + request.getMethod());
-        
-        // Log headers for debugging
-        System.out.println("📋 Request Headers:");
-        Collections.list(request.getHeaderNames()).forEach(headerName -> {
-            String value = headerName.equals("Authorization") 
-                ? request.getHeader(headerName).substring(0, Math.min(20, request.getHeader(headerName).length())) + "..." 
-                : request.getHeader(headerName);
-            System.out.println("   - " + headerName + ": " + value);
-        });
+        System.out.println("\n🔐 JWT Validation: " + path);
         
         final String requestTokenHeader = request.getHeader("Authorization");
         String username = null;
@@ -139,23 +104,20 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
             jwtToken = requestTokenHeader.substring(7);
-            System.out.println("🔑 Token found (length: " + jwtToken.length() + ")");
+            System.out.println("   🔑 Token found (length: " + jwtToken.length() + ")");
             
             try {
                 username = jwtTokenUtil.getUsernameFromToken(jwtToken);
-                System.out.println("👤 Username extracted: " + username);
+                System.out.println("   👤 Username: " + username);
             } catch (IllegalArgumentException e) {
-                System.out.println("❌ Invalid JWT Token format");
+                System.out.println("   ❌ Invalid JWT Token");
             } catch (ExpiredJwtException e) {
-                System.out.println("⚠️ JWT Token expired");
+                System.out.println("   ⚠️ JWT Token expired");
             } catch (Exception e) {
-                System.out.println("❌ JWT parsing error: " + e.getMessage());
+                System.out.println("   ❌ JWT Error: " + e.getMessage());
             }
         } else {
-            System.out.println("⚠️ No Authorization header or doesn't start with 'Bearer '");
-            if (requestTokenHeader != null) {
-                System.out.println("   Header value: " + requestTokenHeader.substring(0, Math.min(20, requestTokenHeader.length())) + "...");
-            }
+            System.out.println("   ⚠️ No Authorization header or invalid format");
         }
         
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -163,7 +125,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
                 
                 if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
-                    System.out.println("✅ Token valid - Setting authentication");
+                    System.out.println("   ✅ Token valid - Authentication set");
                     
                     UsernamePasswordAuthenticationToken authentication = 
                         new UsernamePasswordAuthenticationToken(
@@ -175,24 +137,16 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     );
                     
                     SecurityContextHolder.getContext().setAuthentication(authentication);
-                    System.out.println("✅ Authentication set in SecurityContext");
                 } else {
-                    System.out.println("❌ Token validation failed");
+                    System.out.println("   ❌ Token validation failed");
                 }
             } catch (UsernameNotFoundException e) {
-                System.out.println("❌ User not found: " + username);
-            } catch (Exception e) {
-                System.out.println("❌ Error loading user: " + e.getMessage());
+                System.out.println("   ❌ User not found: " + username);
             }
-        } else {
-            if (username == null) {
-                System.out.println("❌ No username extracted from token");
-            } else {
-                System.out.println("ℹ️ Authentication already exists in context");
-            }
+        } else if (username == null) {
+            System.out.println("   ❌ No username extracted - will return 401");
         }
         
-        System.out.println("➡️ Continuing filter chain...");
         chain.doFilter(request, response);
     }
 }
