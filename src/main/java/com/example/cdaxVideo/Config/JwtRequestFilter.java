@@ -104,103 +104,98 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         return false;
     }
     
-    @Override
-    protected void doFilterInternal(HttpServletRequest request, 
-                                    HttpServletResponse response, 
-                                    FilterChain chain)
-            throws ServletException, IOException {
+@Override
+protected void doFilterInternal(HttpServletRequest request, 
+                                HttpServletResponse response, 
+                                FilterChain chain)
+        throws ServletException, IOException {
+    
+    String requestPath = request.getServletPath();
+    String requestURI = request.getRequestURI();
+    String method = request.getMethod();
+    
+    System.out.println("\n=== JWT FILTER START ===");
+    System.out.println("Path: " + requestPath);
+    System.out.println("URI: " + requestURI);
+    System.out.println("Method: " + method);
+    
+    // 🔥 CRITICAL FIX: Bypass JWT filter for module assessments endpoint
+    if ("GET".equalsIgnoreCase(method) && 
+        (requestPath.matches("/api/modules/\\d+/assessments") || 
+         requestURI.matches(".*/api/modules/\\d+/assessments"))) {
         
-        // Log request details
-        String requestPath = request.getRequestURI();
-        String method = request.getMethod();
-        
-        System.out.println("\n=== JWT Filter Processing ===");
-        System.out.println("Path: " + requestPath);
-        System.out.println("Method: " + method);
-        
-        // Since shouldNotFilter already skipped public endpoints, 
-        // we know this endpoint requires authentication
-        
-        final String requestTokenHeader = request.getHeader("Authorization");
-        
-        if (requestTokenHeader == null || !requestTokenHeader.startsWith("Bearer ")) {
-            System.out.println("❌ Missing or invalid Authorization header");
-            System.out.println("Header value: " + requestTokenHeader);
-            
-            // For GET requests to certain endpoints, we might want to allow without auth
-            // but since shouldNotFilter didn't skip, we should require auth
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
-                "Unauthorized: No JWT token found or invalid format");
-            return;
-        }
-        
-        String jwtToken = requestTokenHeader.substring(7);
-        String username = null;
+        System.out.println("🔥 BYPASSING JWT - Module assessments endpoint is public");
+        System.out.println("=== JWT FILTER END (BYPASSED) ===\n");
+        chain.doFilter(request, response);
+        return;
+    }
+    
+    // For all other requests, continue with JWT validation
+    System.out.println("Proceeding with JWT validation...");
+    
+    final String requestTokenHeader = request.getHeader("Authorization");
+    System.out.println("Auth Header Present: " + (requestTokenHeader != null));
+    
+    String username = null;
+    String jwtToken = null;
+    
+    // Extract JWT token from Authorization header
+    if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+        jwtToken = requestTokenHeader.substring(7);
+        System.out.println("JWT Token Length: " + jwtToken.length());
         
         try {
             username = jwtTokenUtil.getUsernameFromToken(jwtToken);
             System.out.println("Extracted Username: " + username);
         } catch (IllegalArgumentException e) {
             System.out.println("❌ Unable to get JWT Token: " + e.getMessage());
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
-                "Unauthorized: Unable to get JWT token");
-            return;
         } catch (ExpiredJwtException e) {
             System.out.println("⚠️ JWT Token has expired");
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
-                "Unauthorized: JWT Token has expired");
-            return;
         } catch (Exception e) {
-            System.out.println("❌ Error parsing token: " + e.getMessage());
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
-                "Unauthorized: Invalid JWT token");
-            return;
+            System.out.println("❌ Error parsing token: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
-        
-        // Validate token and set authentication
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            System.out.println("🔐 Loading user details for: " + username);
-            
-            try {
-                UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
-                
-                if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
-                    System.out.println("✅ Token validated successfully");
-                    
-                    UsernamePasswordAuthenticationToken authentication = 
-                        new UsernamePasswordAuthenticationToken(
-                            userDetails, 
-                            null, 
-                            userDetails.getAuthorities()
-                        );
-                    
-                    authentication.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
-                    
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    System.out.println("✅ Authentication set in SecurityContext");
-                } else {
-                    System.out.println("❌ Token validation failed");
-                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
-                        "Unauthorized: Invalid JWT token");
-                    return;
-                }
-            } catch (UsernameNotFoundException e) {
-                System.out.println("❌ User not found: " + username);
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
-                    "Unauthorized: User not found");
-                return;
-            } catch (Exception e) {
-                System.out.println("❌ Error loading user: " + e.getMessage());
-                e.printStackTrace();
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, 
-                    "Unauthorized: Error processing authentication");
-                return;
-            }
+    } else {
+        if (requestTokenHeader != null) {
+            System.out.println("⚠️ Invalid Authorization format");
+        } else {
+            System.out.println("⚠️ No Authorization header present");
         }
-        
-        System.out.println("➡️ Continuing filter chain...");
-        chain.doFilter(request, response);
     }
+    
+    // Validate token and set authentication
+    if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+        System.out.println("🔐 Loading user details for: " + username);
+        
+        try {
+            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+            
+            if (jwtTokenUtil.validateToken(jwtToken, userDetails)) {
+                System.out.println("✅ Token validated successfully");
+                
+                UsernamePasswordAuthenticationToken authentication = 
+                    new UsernamePasswordAuthenticationToken(
+                        userDetails, 
+                        null, 
+                        userDetails.getAuthorities()
+                    );
+                
+                authentication.setDetails(
+                    new WebAuthenticationDetailsSource().buildDetails(request)
+                );
+                
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+                System.out.println("✅ Authentication set in SecurityContext");
+            } else {
+                System.out.println("❌ Token validation failed");
+            }
+        } catch (UsernameNotFoundException e) {
+            System.out.println("❌ User not found: " + username);
+        } catch (Exception e) {
+            System.out.println("❌ Error loading user: " + e.getMessage());
+        }
+    }
+    
+    System.out.println("=== JWT FILTER END ===\n");
+    chain.doFilter(request, response);
+}
 }
