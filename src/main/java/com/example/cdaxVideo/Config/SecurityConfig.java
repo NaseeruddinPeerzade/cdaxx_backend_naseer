@@ -1,8 +1,3 @@
-
-// ============================================
-// FILE 1: SecurityConfig.java
-// ============================================
-
 package com.example.cdaxVideo.Config;
 
 import org.springframework.context.annotation.Bean;
@@ -12,6 +7,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,7 +37,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
+            .csrf(AbstractHttpConfigurer::disable)
             .exceptionHandling(handling -> handling
                 .authenticationEntryPoint(jwtAuthenticationEntryPoint))
             .sessionManagement(management -> management
@@ -71,11 +67,11 @@ public class SecurityConfig {
                 // Public files
                 .requestMatchers("/uploads/**").permitAll()
                 
-                // Public course browsing (GET only)
+                // Public course browsing (GET only) - SPECIFIC ENDPOINTS ONLY
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/modules/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/videos/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/modules/{id}").permitAll() // ONLY module details
+                .requestMatchers(HttpMethod.GET, "/api/videos/{id}").permitAll()  // ONLY video details
                 
                 // Swagger
                 .requestMatchers(
@@ -92,7 +88,7 @@ public class SecurityConfig {
                 // =============== PROTECTED ENDPOINTS ===============
                 // 🔒 ALL ASSESSMENT ENDPOINTS REQUIRE AUTH
                 .requestMatchers("/api/assessments/**").authenticated()
-                .requestMatchers("/api/modules/**/assessments").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/modules/{id}/assessments").authenticated()
                 .requestMatchers("/api/course/assessment/**").authenticated()
                 .requestMatchers("/api/questions/**").authenticated()
                 
@@ -127,7 +123,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/purchase").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/modules/*/unlock-*").authenticated()
                 
-                // Default
+                // Default - everything else requires auth
                 .anyRequest().authenticated()
             );
         
