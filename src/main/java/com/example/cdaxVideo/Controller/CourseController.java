@@ -642,7 +642,7 @@ public ResponseEntity<?> getModule(@PathVariable Long id) {
             }
         }
 
-        @GetMapping("/videos/module/{moduleId}")
+        @GetMapping("/module{moduleId}/videos")
         public ResponseEntity<List<Video>> getVideosByModule(@PathVariable Long moduleId) {
             return ResponseEntity.ok(courseService.getVideosByModuleId(moduleId));
         }
@@ -664,7 +664,7 @@ public ResponseEntity<?> getModule(@PathVariable Long id) {
         //     return ResponseEntity.ok(courseService.getAssessmentsByModuleId(moduleId));
         // }
 
-        @GetMapping("/videos/module/{moduleId}")
+        @GetMapping("module/{moduleId}/videos")
         public ResponseEntity<List<Assessment>> getAssessmentsByModule(@PathVariable Long moduleId) {
             return ResponseEntity.ok(courseService.getAssessmentsByModuleId(moduleId));
         }

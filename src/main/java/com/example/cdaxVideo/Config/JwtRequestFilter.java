@@ -41,37 +41,37 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         return false;
     }
     
-private boolean isPublicEndpoint(String path, String method) {
-    // Always skip OPTIONS (CORS preflight)
-    if ("OPTIONS".equalsIgnoreCase(method)) {
-        return true;
+    private boolean isPublicEndpoint(String path, String method) {
+        // Always skip OPTIONS (CORS preflight)
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            return true;
+        }
+        
+        // List ALL public endpoints from your SecurityConfig
+        return path.startsWith("/api/auth/") ||
+               path.startsWith("/api/public/") ||
+               path.startsWith("/api/debug/") ||
+               path.startsWith("/api/courses/public") ||
+               (path.equals("/api/courses") && "GET".equalsIgnoreCase(method)) ||
+               (path.matches("/api/courses/\\d+") && "GET".equalsIgnoreCase(method)) ||
+               // FIXED: Add ALL module patterns
+               (path.matches("/api/modules/\\d+") && "GET".equalsIgnoreCase(method)) ||
+               (path.matches("/api/modules/\\d+/videos") && "GET".equalsIgnoreCase(method)) ||
+               (path.matches("/api/modules/\\d+/assessments") && "GET".equalsIgnoreCase(method)) ||
+               (path.matches("/api/modules/course/\\d+") && "GET".equalsIgnoreCase(method)) ||
+               // Better: Use wildcard pattern
+               (path.matches("/api/modules/\\d+/.*") && "GET".equalsIgnoreCase(method)) ||
+               path.startsWith("/api/course/assessment/") ||
+               path.startsWith("/api/assessments") ||
+               path.startsWith("/uploads/") ||
+               path.startsWith("/swagger-ui/") ||
+               path.startsWith("/v3/api-docs/") ||
+               path.equals("/actuator/health") ||
+               path.equals("/actuator/info") ||
+               path.startsWith("/api/dashboard/public") ||
+               path.startsWith("/api/videos/public") ||
+               path.startsWith("/api/test/");
     }
-    
-    // List ALL public endpoints from your SecurityConfig
-    return path.startsWith("/api/auth/") ||  // ALL auth endpoints for ALL methods
-           path.startsWith("/api/public/") ||
-           path.startsWith("/api/debug/") ||
-           path.startsWith("/api/courses/public") ||
-           (path.equals("/api/courses") && "GET".equalsIgnoreCase(method)) ||
-           (path.matches("/api/courses/\\d+") && "GET".equalsIgnoreCase(method)) ||
-           // Module patterns
-           (path.matches("/api/modules/\\d+") && "GET".equalsIgnoreCase(method)) ||
-           (path.matches("/api/modules/\\d+/.*") && "GET".equalsIgnoreCase(method)) ||
-           (path.matches("/api/modules/course/\\d+") && "GET".equalsIgnoreCase(method)) ||
-           // New patterns
-           (path.matches("/api/videos/module/\\d+") && "GET".equalsIgnoreCase(method)) ||
-           (path.matches("/api/assessments/module/\\d+") && "GET".equalsIgnoreCase(method)) ||
-           path.startsWith("/api/course/assessment/") ||
-           path.startsWith("/api/assessments") ||
-           path.startsWith("/uploads/") ||
-           path.startsWith("/swagger-ui/") ||
-           path.startsWith("/v3/api-docs/") ||
-           path.equals("/actuator/health") ||
-           path.equals("/actuator/info") ||
-           path.startsWith("/api/dashboard/public") ||
-           path.startsWith("/api/videos/public") ||
-           path.startsWith("/api/test/");
-}
     
     @Override
     protected void doFilterInternal(HttpServletRequest request, 
