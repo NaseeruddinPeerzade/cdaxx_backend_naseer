@@ -81,14 +81,35 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()
                 
+                                // Public assessment endpoints - REORDERED FOR PRIORITY
+                                // CRITICAL FIX: Move modules endpoint FIRST before any similar patterns
                 // Public assessment endpoints - REORDERED FOR PRIORITY
                 // CRITICAL FIX: Move modules endpoint FIRST before any similar patterns
                 .requestMatchers(
-    HttpMethod.GET, 
-    "/api/modules/{moduleId}/assessments",
-    "/api/modules/{id}/assessments",
-    "/api/modules/*/assessments"
-).permitAll()
+                    HttpMethod.GET, 
+                    "/api/modules/{moduleId}/assessments",
+                    "/api/modules/{id}/assessments",
+                    "/api/modules/*/assessments"
+                ).permitAll()
+
+                // NEW: Video endpoints
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/modules/{moduleId}/videos",
+                    "/api/modules/{id}/videos", 
+                    "/api/modules/*/videos"
+                ).permitAll()
+
+                // NEW: Module endpoint itself
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/modules/{moduleId}",
+                    "/api/modules/{id}",
+                    "/api/modules/*"
+                ).permitAll()
+
+                // Your existing rules continue...
+                .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/assessments/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/status").permitAll()
