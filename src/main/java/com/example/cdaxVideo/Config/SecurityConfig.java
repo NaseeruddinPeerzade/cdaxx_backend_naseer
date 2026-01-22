@@ -58,6 +58,7 @@ public class SecurityConfig {
                 // Debug endpoints
                 .requestMatchers("/api/debug/**").permitAll()
                 .requestMatchers("/api/public/**").permitAll()
+                
                 // Authentication endpoints
                 .requestMatchers(
                     "/api/auth/login",
@@ -81,43 +82,43 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/courses").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/courses/{id}").permitAll()
                 
-                                // Public assessment endpoints - REORDERED FOR PRIORITY
-                                // CRITICAL FIX: Move modules endpoint FIRST before any similar patterns
-                // Public assessment endpoints - REORDERED FOR PRIORITY
-                // CRITICAL FIX: Move modules endpoint FIRST before any similar patterns
+                // ============ MODULE ENDPOINTS ============
+                // FIXED: Add wildcard patterns for ALL module GET endpoints
                 .requestMatchers(
-                    HttpMethod.GET, 
+                    HttpMethod.GET,
+                    // Single module
+                    "/api/modules/{id}",
+                    "/api/modules/{moduleId}",
+                    "/api/modules/*",
+                    // Module sub-paths (videos, assessments, etc.)
+                    "/api/modules/{id}/**",
+                    "/api/modules/{moduleId}/**",
+                    "/api/modules/*/**",
+                    // Specific patterns (for clarity)
+                    "/api/modules/{moduleId}/videos",
                     "/api/modules/{moduleId}/assessments",
+                    "/api/modules/{id}/videos",
                     "/api/modules/{id}/assessments",
+                    "/api/modules/*/videos",
                     "/api/modules/*/assessments"
                 ).permitAll()
-
-                // NEW: Video endpoints
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/modules/{moduleId}/videos",
-                    "/api/modules/{id}/videos", 
-                    "/api/modules/*/videos"
-                ).permitAll()
-
-                // NEW: Module endpoint itself
-                .requestMatchers(
-                    HttpMethod.GET,
-                    "/api/modules/{moduleId}",
-                    "/api/modules/{id}",
-                    "/api/modules/*"
-                ).permitAll()
-
-                // Your existing rules continue...
-                .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
+                
+                // Module by course
+                .requestMatchers(HttpMethod.GET, "/api/modules/course/{courseId}").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/modules/course/*").permitAll()
+                
+                // ============ ASSESSMENT ENDPOINTS ============
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/assessments/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/status").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/can-attempt").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/questions").permitAll()
-
-                // Assessment submissions require authentication
+                
+                // Test endpoints
                 .requestMatchers(HttpMethod.GET, "/api/test/**").permitAll()
+                
+                // ============ AUTHENTICATED ENDPOINTS ============
+                // Assessment submissions require authentication
                 .requestMatchers(HttpMethod.POST, "/api/modules/{moduleId}/assessments").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/course/assessment/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/assessments/**").authenticated()
@@ -147,13 +148,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/jwt/me").authenticated()
                 .requestMatchers("/api/auth/change-password").authenticated()
                 
-                // Course management - NOTE: Keep BELOW the specific modules endpoint
+                // Course management
                 .requestMatchers("/api/courses/subscribed/**").authenticated()
                 .requestMatchers("/api/courses/user/**").authenticated()
                 .requestMatchers(HttpMethod.POST, "/api/courses").authenticated()
                 .requestMatchers(HttpMethod.PUT, "/api/courses/{id}").authenticated()
                 .requestMatchers(HttpMethod.DELETE, "/api/courses/{id}").authenticated()
-                // CRITICAL: This line was causing the conflict - it comes AFTER modules rule now
                 .requestMatchers("/api/courses/{id}/enroll").authenticated()
 
                 // Streak endpoints (ALL require authentication)
@@ -169,6 +169,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/dashboard/**").authenticated()
                 .requestMatchers("/api/cart/**").authenticated()
                 .requestMatchers("/api/users/**").authenticated()
+                
+                // Module POST endpoints (create/update)
+                .requestMatchers(HttpMethod.POST, "/api/modules").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/modules/{moduleId}/unlock-assessment").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/modules/{moduleId}/unlock-next").authenticated()
                 
                 // Default - all other requests require authentication
                 .anyRequest().authenticated()

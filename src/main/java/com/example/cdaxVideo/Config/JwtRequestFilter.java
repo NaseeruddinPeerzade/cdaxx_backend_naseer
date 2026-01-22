@@ -54,7 +54,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                path.startsWith("/api/courses/public") ||
                (path.equals("/api/courses") && "GET".equalsIgnoreCase(method)) ||
                (path.matches("/api/courses/\\d+") && "GET".equalsIgnoreCase(method)) ||
+               // FIXED: Add ALL module patterns
+               (path.matches("/api/modules/\\d+") && "GET".equalsIgnoreCase(method)) ||
+               (path.matches("/api/modules/\\d+/videos") && "GET".equalsIgnoreCase(method)) ||
                (path.matches("/api/modules/\\d+/assessments") && "GET".equalsIgnoreCase(method)) ||
+               (path.matches("/api/modules/course/\\d+") && "GET".equalsIgnoreCase(method)) ||
+               // Better: Use wildcard pattern
+               (path.matches("/api/modules/\\d+/.*") && "GET".equalsIgnoreCase(method)) ||
                path.startsWith("/api/course/assessment/") ||
                path.startsWith("/api/assessments") ||
                path.startsWith("/uploads/") ||
