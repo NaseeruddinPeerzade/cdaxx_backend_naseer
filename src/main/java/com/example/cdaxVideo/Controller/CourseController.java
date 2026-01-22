@@ -579,6 +579,7 @@ private void applyUserVideoProgress(CourseResponseDTO courseDTO, Long userId, bo
 }
 
 @GetMapping("/modules/{id}")
+@Transactional(readOnly = true)
 public ResponseEntity<?> getModule(@PathVariable Long id) {
     try {
         Optional<Module> moduleOpt = courseService.getModuleById(id);
