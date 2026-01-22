@@ -72,25 +72,68 @@ public class CourseService {
         return courseRepository.save(course);
     }
 
-    public List<Course> getAllCoursesWithModulesAndVideos() {
+public List<Course> getAllCoursesWithModulesAndVideos() {
+    logger.info("📚 Getting all courses with modules and videos");
+    
+    try {
+        // Get courses WITHOUT videos initially
         List<Course> courses = courseRepository.findAllWithModules();
+        logger.info("📚 Found {} courses", courses.size());
+        
         for (Course course : courses) {
+            logger.debug("   ├─ Loading videos for course: {}", course.getTitle());
+            
             for (Module module : course.getModules()) {
-                module.setVideos(videoRepository.findByModuleId(module.getId()));
+                // Get videos separately
+                List<Video> videos = videoRepository.findByModuleId(module.getId());
+                
+                // Use the FIXED setVideos method
+                module.setVideos(videos);
             }
         }
+        
+        logger.info("✅ All courses loaded successfully");
         return courses;
+        
+    } catch (Exception e) {
+        logger.error("❌ ERROR in getAllCoursesWithModulesAndVideos:", e);
+        return new ArrayList<>();
     }
+}
 
-    public Optional<Course> getCourseByIdWithModulesAndVideos(Long id) {
+public Optional<Course> getCourseByIdWithModulesAndVideos(Long id) {
+    logger.info("📚 Getting course with modules and videos for ID: {}", id);
+    
+    try {
+        // Get course WITHOUT videos initially
         Optional<Course> optionalCourse = courseRepository.findByIdWithModules(id);
-        optionalCourse.ifPresent(course -> {
+        
+        if (optionalCourse.isPresent()) {
+            Course course = optionalCourse.get();
+            logger.info("📚 Course found: {} ({} modules)", 
+                       course.getTitle(), course.getModules().size());
+            
+            // Load videos for each module using the FIXED setVideos method
             for (Module module : course.getModules()) {
-                module.setVideos(videoRepository.findByModuleId(module.getId()));
+                // Get videos separately
+                List<Video> videos = videoRepository.findByModuleId(module.getId());
+                logger.debug("   ├─ Module {}: {} videos found", 
+                           module.getId(), videos.size());
+                
+                // Use the FIXED setVideos method that doesn't replace the collection
+                module.setVideos(videos);
             }
-        });
+            
+            logger.info("✅ Course data loaded successfully");
+        }
+        
         return optionalCourse;
+        
+    } catch (Exception e) {
+        logger.error("❌ ERROR in getCourseByIdWithModulesAndVideos:", e);
+        return Optional.empty();
     }
+}
 
 // In CourseService.java
 public List<Course> getPublicCourses() {
@@ -386,6 +429,7 @@ public Map<String, Object> getDashboardStats(Long userId) {
         return moduleRepository.save(module);
     }
 
+    @Transactional(readOnly = true) 
     public List<Module> getModulesByCourseId(Long courseId) {
         return moduleRepository.findByCourseId(courseId);
     }
@@ -588,97 +632,105 @@ public boolean unlockNextModuleAfterPassing(
         Long courseId,
         Long currentModuleId
 ) {
-    System.out.println("🔓 unlockNextModuleAfterPassing START");
+    logger.info("🔓 unlockNextModuleAfterPassing - userId: {}, courseId: {}, currentModuleId: {}", 
+               userId, courseId, currentModuleId);
+    
+    try {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
-    User user = userRepository.findById(userId)
-            .orElseThrow(() -> new RuntimeException("User not found"));
+        Course course = courseRepository.findById(courseId)
+                .orElseThrow(() -> new RuntimeException("Course not found"));
 
-    Course course = courseRepository.findById(courseId)
-            .orElseThrow(() -> new RuntimeException("Course not found"));
+        // Get modules WITHOUT videos
+        List<Module> modules = moduleRepository.findByCourseId(courseId);
 
-    // ✅ Fetch modules FIRST (now they come ordered from repository)
-    List<Module> modules = moduleRepository.findByCourseId(courseId);
-
-    if (modules.isEmpty()) {
-        System.out.println("❌ No modules found for course");
-        return false;
-    }
-
-    // ✅ Debug logging - show module order
-    System.out.println("🔓 Modules order:");
-    for (int i = 0; i < modules.size(); i++) {
-        System.out.println("   [" + i + "] moduleId=" + modules.get(i).getId() + 
-                         ", title=" + modules.get(i).getTitle());
-    }
-
-    // ✅ Find current module index
-    int currentIndex = -1;
-    for (int i = 0; i < modules.size(); i++) {
-        if (modules.get(i).getId().equals(currentModuleId)) {
-            currentIndex = i;
-            break;
+        if (modules.isEmpty()) {
+            logger.error("❌ No modules found for course {}", courseId);
+            return false;
         }
-    }
 
-    if (currentIndex == -1) {
-        System.out.println("❌ Current module not found in course modules");
-        return false;
-    }
+        // Debug logging
+        logger.info("🔓 Modules order for course {}:", courseId);
+        for (int i = 0; i < modules.size(); i++) {
+            logger.info("   [{}/{}] Module ID: {}, Title: {}", 
+                       i + 1, modules.size(), modules.get(i).getId(), modules.get(i).getTitle());
+        }
 
-    if (currentIndex + 1 >= modules.size()) {
-        System.out.println("ℹ️ Current module is the last module");
-        return false;
-    }
+        // Find current module index
+        int currentIndex = -1;
+        for (int i = 0; i < modules.size(); i++) {
+            if (modules.get(i).getId().equals(currentModuleId)) {
+                currentIndex = i;
+                break;
+            }
+        }
 
-    Module nextModule = modules.get(currentIndex + 1);
-    System.out.println("🔓 Next module ID = " + nextModule.getId());
+        if (currentIndex == -1) {
+            logger.error("❌ Current module {} not found in course {}", currentModuleId, courseId);
+            return false;
+        }
 
-    // ✅ Check user-module progress
-    Optional<UserModuleProgress> existingProgress =
-            userModuleProgressRepository.findByUserAndModule(user, nextModule);
+        if (currentIndex + 1 >= modules.size()) {
+            logger.info("ℹ️ Current module is the last module");
+            return false;
+        }
 
-    if (existingProgress.isPresent() && existingProgress.get().isUnlocked()) {
-        System.out.println("ℹ️ Next module already unlocked");
+        Module nextModule = modules.get(currentIndex + 1);
+        logger.info("🎯 Next module to unlock: ID={}, Title={}", 
+                   nextModule.getId(), nextModule.getTitle());
+
+        // Check if already unlocked
+        Optional<UserModuleProgress> existingProgress =
+                userModuleProgressRepository.findByUserAndModule(user, nextModule);
+
+        if (existingProgress.isPresent() && existingProgress.get().isUnlocked()) {
+            logger.info("ℹ️ Next module already unlocked");
+            return true;
+        }
+
+        // Unlock next module WITHOUT touching videos collection
+        UserModuleProgress moduleProgress = existingProgress.orElseGet(() -> {
+            UserModuleProgress p = new UserModuleProgress();
+            p.setUser(user);
+            p.setModule(nextModule);
+            return p;
+        });
+
+        moduleProgress.setUnlocked(true);
+        moduleProgress.setUnlockedOn(new Date());
+        userModuleProgressRepository.save(moduleProgress);
+
+        logger.info("✅ Next module unlocked");
+
+        // Unlock first video separately
+        List<Video> nextVideos = videoRepository.findByModuleId(nextModule.getId());
+        if (!nextVideos.isEmpty()) {
+            Video firstVideo = nextVideos.get(0);
+
+            UserVideoProgress videoProgress =
+                    userVideoProgressRepository.findByUserAndVideo(user, firstVideo)
+                            .orElseGet(() -> {
+                                UserVideoProgress v = new UserVideoProgress();
+                                v.setUser(user);
+                                v.setVideo(firstVideo);
+                                return v;
+                            });
+
+            videoProgress.setUnlocked(true);
+            videoProgress.setUnlockedOn(new Date());
+            userVideoProgressRepository.save(videoProgress);
+
+            logger.info("🎬 First video unlocked for module {}", nextModule.getId());
+        }
+
+        logger.info("🔓 unlockNextModuleAfterPassing completed successfully");
         return true;
+        
+    } catch (Exception e) {
+        logger.error("❌ ERROR in unlockNextModuleAfterPassing:", e);
+        return false;
     }
-
-    // ✅ Unlock next module
-    UserModuleProgress moduleProgress = existingProgress.orElseGet(() -> {
-        UserModuleProgress p = new UserModuleProgress();
-        p.setUser(user);
-        p.setModule(nextModule);
-        return p;
-    });
-
-    moduleProgress.setUnlocked(true);
-    moduleProgress.setUnlockedOn(new Date());
-    userModuleProgressRepository.save(moduleProgress);
-
-    System.out.println("✅ Next module unlocked");
-
-    // ✅ Unlock first video of next module
-    List<Video> nextVideos = videoRepository.findByModuleId(nextModule.getId());
-    if (!nextVideos.isEmpty()) {
-        Video firstVideo = nextVideos.get(0);
-
-        UserVideoProgress videoProgress =
-                userVideoProgressRepository.findByUserAndVideo(user, firstVideo)
-                        .orElseGet(() -> {
-                            UserVideoProgress v = new UserVideoProgress();
-                            v.setUser(user);
-                            v.setVideo(firstVideo);
-                            return v;
-                        });
-
-        videoProgress.setUnlocked(true);
-        videoProgress.setUnlockedOn(new Date());
-        userVideoProgressRepository.save(videoProgress);
-
-        System.out.println("🎬 First video unlocked");
-    }
-
-    System.out.println("🔓 unlockNextModuleAfterPassing END");
-    return true;
 }
 
 /**
@@ -1136,59 +1188,103 @@ public boolean unlockAssessmentForModule(Long userId, Long moduleId) {
      * Unlock next module after assessment passed by user.
      * This should be invoked only after you mark UserAssessmentProgress.passed = true in your assessment submit handler.
      */
-    @Transactional
-    public boolean unlockNextModuleForUser(Long userId, Long courseId, Long moduleId) {
-        User user = userRepository.findById(userId).orElseThrow();
-
-        // find course modules ordered (we assume course.getModules() returns in order)
-        Long courseIdFromModule = moduleRepository.findById(moduleId)
-                .orElseThrow().getCourse().getId();
-        Course course = getCourseByIdWithModulesAndVideos(courseIdFromModule).orElseThrow();
-        List<Module> modules = course.getModules();
-
-        int mIndex = -1;
+@Transactional
+public boolean unlockNextModuleForUser(Long userId, Long courseId, Long currentModuleId) {
+    logger.info("🔓 Unlocking next module - userId: {}, courseId: {}, currentModuleId: {}", 
+                userId, courseId, currentModuleId);
+    
+    try {
+        // 1. Find the course WITHOUT loading videos (to avoid orphan removal issue)
+        Course course = courseRepository.findById(courseId)
+            .orElseThrow(() -> new RuntimeException("Course not found"));
+        
+        // 2. Get modules WITHOUT their videos collection
+        List<Module> modules = moduleRepository.findByCourseId(courseId);
+        
+        logger.info("🔓 Found {} modules for course {}", modules.size(), courseId);
+        
+        // 3. Debug log module order
         for (int i = 0; i < modules.size(); i++) {
-            if (modules.get(i).getId().equals(moduleId)) {
-                mIndex = i;
+            logger.info("   [{}/{}] Module ID: {}, Title: {}", 
+                       i + 1, modules.size(), modules.get(i).getId(), modules.get(i).getTitle());
+        }
+        
+        // 4. Find current module index
+        int currentIndex = -1;
+        for (int i = 0; i < modules.size(); i++) {
+            if (modules.get(i).getId().equals(currentModuleId)) {
+                currentIndex = i;
                 break;
             }
         }
-
-        if (mIndex >= 0 && mIndex + 1 < modules.size()) {
-            Module nextModule = modules.get(mIndex + 1);
-
-            // unlock next module
-            UserModuleProgress mp = userModuleProgressRepository.findByUserAndModule(user, nextModule)
-                    .orElseGet(() -> {
-                        UserModuleProgress nm = new UserModuleProgress();
-                        nm.setUser(user);
-                        nm.setModule(nextModule);
-                        return nm;
-                    });
-            mp.setUnlocked(true);
-            mp.setUnlockedOn(new Date());
-            userModuleProgressRepository.save(mp);
-
-            // unlock first video of next module
-            List<Video> nextVideos = videoRepository.findByModuleId(nextModule.getId());
-            if (!nextVideos.isEmpty()) {
-                Video first = nextVideos.get(0);
-                UserVideoProgress vp = userVideoProgressRepository.findByUserAndVideo(user, first)
-                        .orElseGet(() -> {
-                            UserVideoProgress nv = new UserVideoProgress();
-                            nv.setUser(user);
-                            nv.setVideo(first);
-                            return nv;
-                        });
-                vp.setUnlocked(true);
-                vp.setUnlockedOn(new Date());
-                userVideoProgressRepository.save(vp);
-            }
-            return true;
+        
+        if (currentIndex == -1) {
+            logger.error("❌ Current module {} not found in course {}", currentModuleId, courseId);
+            return false;
         }
-
+        
+        if (currentIndex + 1 >= modules.size()) {
+            logger.info("ℹ️ Current module is the last module, nothing to unlock");
+            return false;
+        }
+        
+        // 5. Get the next module
+        Module nextModule = modules.get(currentIndex + 1);
+        logger.info("🎯 Next module to unlock: ID={}, Title={}", 
+                   nextModule.getId(), nextModule.getTitle());
+        
+        // 6. Get the user
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
+        
+        // 7. Create or get module progress WITHOUT touching videos collection
+        UserModuleProgress moduleProgress = userModuleProgressRepository
+            .findByUserAndModule(user, nextModule)
+            .orElseGet(() -> {
+                UserModuleProgress progress = new UserModuleProgress();
+                progress.setUser(user);
+                progress.setModule(nextModule);
+                return progress;
+            });
+        
+        // 8. Update only what we need
+        moduleProgress.setUnlocked(true);
+        moduleProgress.setUnlockedOn(new Date());
+        
+        // 9. Save module progress
+        userModuleProgressRepository.save(moduleProgress);
+        logger.info("✅ Module {} unlocked successfully", nextModule.getId());
+        
+        // 10. Unlock first video separately
+        List<Video> nextVideos = videoRepository.findByModuleId(nextModule.getId());
+        if (!nextVideos.isEmpty()) {
+            Video firstVideo = nextVideos.get(0);
+            
+            UserVideoProgress videoProgress = userVideoProgressRepository
+                .findByUserAndVideo(user, firstVideo)
+                .orElseGet(() -> {
+                    UserVideoProgress progress = new UserVideoProgress();
+                    progress.setUser(user);
+                    progress.setVideo(firstVideo);
+                    return progress;
+                });
+            
+            videoProgress.setUnlocked(true);
+            videoProgress.setUnlockedOn(new Date());
+            userVideoProgressRepository.save(videoProgress);
+            
+            logger.info("✅ First video {} unlocked for module {}", 
+                       firstVideo.getId(), nextModule.getId());
+        }
+        
+        logger.info("🎉 Next module unlock completed successfully");
+        return true;
+        
+    } catch (Exception e) {
+        logger.error("❌ ERROR in unlockNextModuleForUser:", e);
         return false;
     }
+}
 
 
     /**
