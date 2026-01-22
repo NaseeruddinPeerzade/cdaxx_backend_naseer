@@ -664,7 +664,7 @@ public ResponseEntity<?> getModule(@PathVariable Long id) {
         //     return ResponseEntity.ok(courseService.getAssessmentsByModuleId(moduleId));
         // }
 
-        @GetMapping("module/{moduleId}/videos")
+        @GetMapping("/module/{moduleId}/videos")
         public ResponseEntity<List<Assessment>> getAssessmentsByModule(@PathVariable Long moduleId) {
             return ResponseEntity.ok(courseService.getAssessmentsByModuleId(moduleId));
         }
