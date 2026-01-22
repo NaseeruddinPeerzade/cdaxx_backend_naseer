@@ -386,19 +386,8 @@ public Map<String, Object> getDashboardStats(Long userId) {
         return moduleRepository.save(module);
     }
 
-    @Transactional(readOnly = true)  // Add this
     public List<Module> getModulesByCourseId(Long courseId) {
-        List<Module> modules = moduleRepository.findByCourseId(courseId);
-        
-        // Initialize lazy collections
-        for (Module module : modules) {
-            module.getVideos().size(); // Force initialization
-            if (module.getCourse() != null) {
-                module.getCourse().getId(); // Access to prevent proxy
-            }
-        }
-        
-        return modules;
+        return moduleRepository.findByCourseId(courseId);
     }
 
     public Optional<Module> getModuleById(Long id) {

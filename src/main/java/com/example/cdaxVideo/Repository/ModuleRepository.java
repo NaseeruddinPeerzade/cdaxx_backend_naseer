@@ -14,4 +14,11 @@ public interface ModuleRepository extends JpaRepository<Module, Long> {
     
     @Query("SELECT COUNT(m) FROM Module m WHERE m.course.id = :courseId")
     Long countByCourseId(@Param("courseId") Long courseId);
+        // NEW: Eagerly load videos
+    @Query("SELECT DISTINCT m FROM Module m " +
+           "LEFT JOIN FETCH m.videos " +
+           "LEFT JOIN FETCH m.course " +
+           "WHERE m.course.id = :courseId " +
+           "ORDER BY m.id")
+    List<Module> findByCourseIdWithVideos(@Param("courseId") Long courseId);
 }
