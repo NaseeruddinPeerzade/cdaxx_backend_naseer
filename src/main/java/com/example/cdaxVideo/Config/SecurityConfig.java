@@ -83,7 +83,12 @@ public class SecurityConfig {
                 
                 // Public assessment endpoints - REORDERED FOR PRIORITY
                 // CRITICAL FIX: Move modules endpoint FIRST before any similar patterns
-                .requestMatchers(HttpMethod.GET, "/api/modules/{moduleId}/assessments").permitAll()
+                .requestMatchers(
+    HttpMethod.GET, 
+    "/api/modules/{moduleId}/assessments",
+    "/api/modules/{id}/assessments",
+    "/api/modules/*/assessments"
+).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/assessments/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/course/assessment/status").permitAll()
