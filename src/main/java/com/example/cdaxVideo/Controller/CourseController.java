@@ -642,34 +642,63 @@ public ResponseEntity<?> getModule(@PathVariable Long id) {
             }
         }
 
-        @GetMapping("/modules/{moduleId}/videos")
-        @Transactional(readOnly = true)
-        public ResponseEntity<List<Video>> getVideosByModule(@PathVariable Long moduleId) {
-            return ResponseEntity.ok(courseService.getVideosByModuleId(moduleId));
+@GetMapping("/modules/{moduleId}/videos")
+@Transactional(readOnly = true)
+public ResponseEntity<?> getVideosByModule(@PathVariable Long moduleId) {
+    try {
+        List<Video> videos = courseService.getVideosByModuleId(moduleId);
+        System.out.println("✅ Found " + videos.size() + " videos");
+        
+        // Simple response to avoid lazy loading
+        List<Map<String, Object>> response = new ArrayList<>();
+        for (Video v : videos) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", v.getId());
+            map.put("title", v.getTitle());
+            map.put("duration", v.getDuration());
+            map.put("displayOrder", v.getDisplayOrder());
+            map.put("isPreview", v.getIsPreview());
+            map.put("videoUrl", v.getVideoUrl());
+            map.put("youtubeId", v.getYoutubeId());
+            response.add(map);
         }
-
-        // ---------------------- ASSESSMENT APIs ----------------------
-        @PostMapping("/assessments")
-        public ResponseEntity<?> addAssessment(
-                @RequestParam("moduleId") Long moduleId,
-                @RequestBody Assessment assessment) {
-            try {
-                return ResponseEntity.ok(courseService.saveAssessment(moduleId, assessment));
-            } catch (IllegalArgumentException e) {
-                return ResponseEntity.badRequest().body(e.getMessage());
-            }
-        }
+        
+        return ResponseEntity.ok(response);
+    } catch (Exception e) {
+        e.printStackTrace();
+        return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+    }
+}
 
         // @GetMapping("/modules/{moduleId}/assessments")
         // public ResponseEntity<List<Assessment>> getAssessmentsByModule(@PathVariable Long moduleId) {
         //     return ResponseEntity.ok(courseService.getAssessmentsByModuleId(moduleId));
         // }
 
-        @GetMapping("/modules/{moduleId}/assessments")
-        @Transactional(readOnly = true)
-        public ResponseEntity<List<Assessment>> getAssessmentsByModule(@PathVariable Long moduleId) {
-            return ResponseEntity.ok(courseService.getAssessmentsByModuleId(moduleId));
+@GetMapping("/modules/{moduleId}/assessments")
+@Transactional(readOnly = true)
+public ResponseEntity<?> getAssessmentsByModule(@PathVariable Long moduleId) {
+    try {
+        List<Assessment> assessments = courseService.getAssessmentsByModuleId(moduleId);
+        System.out.println("✅ Found " + assessments.size() + " assessments");
+        
+        // Simple response to avoid lazy loading
+        List<Map<String, Object>> response = new ArrayList<>();
+        for (Assessment a : assessments) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", a.getId());
+            map.put("title", a.getTitle());
+            map.put("totalMarks", a.getTotalMarks());
+            map.put("totalQuestions", a.getTotalQuestions());
+            response.add(map);
         }
+        
+        return ResponseEntity.ok(response);
+    } catch (Exception e) {
+        e.printStackTrace();
+        return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+    }
+}
 
         // ---------------------- QUESTION APIs ----------------------
         @PostMapping("/questions")
