@@ -109,6 +109,7 @@ public class User {
         this.updatedAt = LocalDateTime.now();
     }
 
+    
     @JsonIgnore
     @ManyToMany(mappedBy = "subscribedUsers")
     private List<Course> subscribedCourses = new ArrayList<>();

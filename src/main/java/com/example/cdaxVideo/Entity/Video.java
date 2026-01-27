@@ -1,4 +1,5 @@
     package com.example.cdaxVideo.Entity;
+    import com.fasterxml.jackson.annotation.JsonIgnore;
     import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
     import com.fasterxml.jackson.annotation.JsonProperty;
     import jakarta.persistence.*;
@@ -27,6 +28,7 @@
         @Column(nullable = false)
         private Integer duration; // Duration in seconds
 
+        @JsonIgnore
         @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
         @ManyToOne(fetch = FetchType.LAZY)
         @JoinColumn(name = "module_id", nullable = false)
@@ -44,6 +46,7 @@
         @Column(name = "updated_at", nullable = false)
         private LocalDateTime updatedAt;
 
+        @JsonIgnore
         @OneToMany(mappedBy = "video", cascade = CascadeType.ALL, orphanRemoval = true)
         private Set<UserVideoProgress> userProgress = new HashSet<>();
 

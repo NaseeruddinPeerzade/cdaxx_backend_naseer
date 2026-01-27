@@ -7,9 +7,15 @@ public class CartItemDTO {
     private Long courseId;
     private String courseTitle;
     private String thumbnailUrl;
-    private Double price;
+    private Double price; // Current price (after discount if any)
     private Integer duration; // in minutes
     private LocalDateTime addedAt;
+    
+    // NEW DISCOUNT FIELDS
+    private boolean hasDiscount;
+    private Double originalPrice;
+    private Double discountedPrice;
+    private Double discountPercentage;
     
     // Constructors
     public CartItemDTO() {}
@@ -23,62 +29,61 @@ public class CartItemDTO {
         this.price = price;
         this.duration = duration;
         this.addedAt = addedAt;
+        this.hasDiscount = false;
+        this.originalPrice = price;
+        this.discountedPrice = price;
+        this.discountPercentage = 0.0;
     }
     
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
+    // Getters and Setters for existing fields
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
     
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public Long getCourseId() { return courseId; }
+    public void setCourseId(Long courseId) { this.courseId = courseId; }
     
-    public Long getCourseId() {
-        return courseId;
-    }
+    public String getCourseTitle() { return courseTitle; }
+    public void setCourseTitle(String courseTitle) { this.courseTitle = courseTitle; }
     
-    public void setCourseId(Long courseId) {
-        this.courseId = courseId;
-    }
+    public String getThumbnailUrl() { return thumbnailUrl; }
+    public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
     
-    public String getCourseTitle() {
-        return courseTitle;
-    }
+    public Double getPrice() { return price; }
+    public void setPrice(Double price) { this.price = price; }
     
-    public void setCourseTitle(String courseTitle) {
-        this.courseTitle = courseTitle;
-    }
+    public Integer getDuration() { return duration; }
+    public void setDuration(Integer duration) { this.duration = duration; }
     
-    public String getThumbnailUrl() {
-        return thumbnailUrl;
-    }
+    public LocalDateTime getAddedAt() { return addedAt; }
+    public void setAddedAt(LocalDateTime addedAt) { this.addedAt = addedAt; }
     
-    public void setThumbnailUrl(String thumbnailUrl) {
-        this.thumbnailUrl = thumbnailUrl;
-    }
+    // NEW: Getters and Setters for discount fields
+    public boolean isHasDiscount() { return hasDiscount; }
+    public void setHasDiscount(boolean hasDiscount) { this.hasDiscount = hasDiscount; }
     
-    public Double getPrice() {
-        return price;
-    }
+    public Double getOriginalPrice() { return originalPrice; }
+    public void setOriginalPrice(Double originalPrice) { this.originalPrice = originalPrice; }
     
-    public void setPrice(Double price) {
-        this.price = price;
-    }
+    public Double getDiscountedPrice() { return discountedPrice; }
+    public void setDiscountedPrice(Double discountedPrice) { this.discountedPrice = discountedPrice; }
     
-    public Integer getDuration() {
-        return duration;
-    }
+    public Double getDiscountPercentage() { return discountPercentage; }
+    public void setDiscountPercentage(Double discountPercentage) { this.discountPercentage = discountPercentage; }
     
-    public void setDuration(Integer duration) {
-        this.duration = duration;
-    }
-    
-    public LocalDateTime getAddedAt() {
-        return addedAt;
-    }
-    
-    public void setAddedAt(LocalDateTime addedAt) {
-        this.addedAt = addedAt;
+    // Helper method to calculate discount
+    public void calculateDiscount(Double original, Double discounted) {
+        if (original != null && discounted != null && original > 0 && discounted < original) {
+            this.hasDiscount = true;
+            this.originalPrice = original;
+            this.discountedPrice = discounted;
+            this.price = discounted; // Set current price to discounted price
+            this.discountPercentage = ((original - discounted) / original) * 100;
+        } else {
+            this.hasDiscount = false;
+            this.originalPrice = original;
+            this.discountedPrice = original;
+            this.price = original;
+            this.discountPercentage = 0.0;
+        }
     }
 }

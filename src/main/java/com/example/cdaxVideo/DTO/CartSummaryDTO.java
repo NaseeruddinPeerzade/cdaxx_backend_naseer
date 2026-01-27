@@ -6,9 +6,9 @@ import java.util.List;
 public class CartSummaryDTO {
     private List<CartItemDTO> items = new ArrayList<>();
     private Integer itemCount;
-    private Double totalPrice;
-    private Double discountedPrice;
-    private Double discountAmount;
+    private Double totalPrice; // Original total price
+    private Double discountedPrice; // Price after all discounts
+    private Double discountAmount; // Total discount amount
     
     // Constructors
     public CartSummaryDTO() {}
@@ -23,67 +23,30 @@ public class CartSummaryDTO {
     }
     
     // Getters and Setters
-    public List<CartItemDTO> getItems() {
-        return items;
-    }
+    public List<CartItemDTO> getItems() { return items; }
+    public void setItems(List<CartItemDTO> items) { this.items = items; }
     
-    public void setItems(List<CartItemDTO> items) {
-        this.items = items;
-    }
+    public Integer getItemCount() { return itemCount; }
+    public void setItemCount(Integer itemCount) { this.itemCount = itemCount; }
     
-    public Integer getItemCount() {
-        return itemCount;
-    }
+    public Double getTotalPrice() { return totalPrice; }
+    public void setTotalPrice(Double totalPrice) { this.totalPrice = totalPrice; }
     
-    public void setItemCount(Integer itemCount) {
-        this.itemCount = itemCount;
-        if (this.totalPrice != null) {
-            calculateDiscounts();
-        }
-    }
+    public Double getDiscountedPrice() { return discountedPrice; }
+    public void setDiscountedPrice(Double discountedPrice) { this.discountedPrice = discountedPrice; }
     
-    public Double getTotalPrice() {
-        return totalPrice;
-    }
+    public Double getDiscountAmount() { return discountAmount; }
+    public void setDiscountAmount(Double discountAmount) { this.discountAmount = discountAmount; }
     
-    public void setTotalPrice(Double totalPrice) {
-        this.totalPrice = totalPrice;
-        if (this.itemCount != null) {
-            calculateDiscounts();
-        }
-    }
-    
-    public Double getDiscountedPrice() {
-        return discountedPrice;
-    }
-    
-    public void setDiscountedPrice(Double discountedPrice) {
-        this.discountedPrice = discountedPrice;
-        if (this.totalPrice != null) {
-            this.discountAmount = this.totalPrice - this.discountedPrice;
-        }
-    }
-    
-    public Double getDiscountAmount() {
-        return discountAmount;
-    }
-    
-    public void setDiscountAmount(Double discountAmount) {
-        this.discountAmount = discountAmount;
-    }
-    
-    // Helper method to calculate discounts
-    private void calculateDiscounts() {
-        if (totalPrice == null) return;
+    // Helper method to calculate bulk discount
+    public void applyBulkDiscount() {
+        if (totalPrice == null || discountedPrice == null) return;
         
-        // Apply discount based on item count
-        if (itemCount >= 2) {
-            // 10% discount for 2+ items
-            this.discountedPrice = totalPrice * 0.9;
-            this.discountAmount = totalPrice - discountedPrice;
-        } else {
-            this.discountedPrice = totalPrice;
-            this.discountAmount = 0.0;
+        // Apply additional 10% discount for 2+ items
+        if (itemCount != null && itemCount >= 2) {
+            double bulkDiscounted = discountedPrice * 0.9;
+            discountAmount = totalPrice - bulkDiscounted;
+            discountedPrice = bulkDiscounted;
         }
     }
 }
